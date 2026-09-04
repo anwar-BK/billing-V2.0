@@ -52,10 +52,15 @@ services:
       - MONGO_URI=mongodb://mongodb:27017/billing_db
       - GENIEACS_URL=http://genieacs:7557
     volumes:
-      # Mount folder (bukan file). Mount file yang belum ada membuat Docker
-      # membuat FOLDER bernama billing.db — SQLite lalu crash saat install pertama.
+      # Mount folder database agar SQLite tidak dibuat sebagai folder oleh Docker.
       - ./database:/app/database
-      - ./settings.json:/app/settings.json
+      # settings.json harus dibuat di host sebelum menjalankan Compose.
+      # Long syntax mencegah Docker membuat folder jika file belum tersedia.
+      - type: bind
+        source: ./settings.json
+        target: /app/settings.json
+        bind:
+          create_host_path: false
       - ./auth_info_baileys:/app/auth_info_baileys
       - ./logs:/app/logs
     depends_on:

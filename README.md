@@ -211,6 +211,20 @@ cd /root/billing-rtrw
   mkdir -p database logs auth_info_baileys
   ```
 
+  **Penting:** `settings.json` wajib berupa file, bukan folder. Docker Compose akan menolak startup jika file ini belum dibuat agar tidak terjadi error `EISDIR`. Siapkan file konfigurasi pribadi terlebih dahulu:
+
+  ```bash
+  test -f settings.json || { echo "settings.json belum ada. Salin dari backup pribadi lalu ulangi."; exit 1; }
+  test ! -d settings.json || { echo "settings.json adalah folder. Hapus folder tersebut, lalu salin file settings.json yang benar."; exit 1; }
+  ```
+
+  Jika sebelumnya Docker sudah membuat folder `settings.json`, perbaiki dengan:
+
+  ```bash
+  rm -rf settings.json
+  cp /root/backup-billing/settings.json ./settings.json
+  ```
+
 ---
 
 ### Langkah 5: Jalankan Layanan dengan Docker Compose
