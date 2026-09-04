@@ -204,7 +204,14 @@ cd /root/billing-rtrw
   cp /root/backup-billing/.env ./.env
   ```
 
-  Jika ini instalasi baru, buat `settings.json` melalui konfigurasi aplikasi atau gunakan file konfigurasi pribadi yang sudah disiapkan. Jangan memasukkan password, API key, atau database produksi ke repository public.
+  Jika ini instalasi baru, gunakan template aman yang tersedia di repository:
+
+  ```bash
+  cp settings.example.json settings.json
+  nano settings.json
+  ```
+
+  Ganti semua nilai `GANTI_...`, `IP_SERVER`, nomor admin WhatsApp, dan URL sesuai server Anda. Jangan memasukkan password, API key, atau database produksi ke repository public.
 3. Pastikan folder runtime tersedia:
 
   ```bash
