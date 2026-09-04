@@ -6,7 +6,7 @@
       <span><%= t('tech.nav.my_tasks', 'Tugas Saya') %></span>
     </a>
     <a href="/tech/pool" class="nav-item <%= activePage === 'pool' ? 'active' : '' %>">
-      <i class="bi bi-inbox-fill"></i>
+      <span style="position:relative"><i class="bi bi-inbox-fill"></i><span id="tech-pool-count" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:9px;<%= (!ticketNotifications || ticketNotifications.pool < 1) ? 'display:none;' : '' %>"><%= ticketNotifications ? ticketNotifications.pool : 0 %></span></span>
       <span><%= t('tech.nav.new_tickets', 'Tiket Baru') %></span>
     </a>
     <a href="/tech/attendance" class="nav-item <%= activePage === 'attendance' ? 'active' : '' %>">
@@ -24,6 +24,64 @@
   </nav>
 
   <script>
+    let ticketSoundEnabled = localStorage.getItem('tech_ticket_sound') === 'on';
+    let ticketSoundContext = null;
+    let lastPoolTicketCount = <%= ticketNotifications ? ticketNotifications.pool : 0 %>;
+
+    function updateTicketSoundButton() {
+      const button = document.getElementById('ticket-sound-toggle');
+      if (!button) return;
+      button.innerHTML = ticketSoundEnabled ? '<i class="bi bi-volume-up-fill"></i>' : '<i class="bi bi-volume-mute-fill"></i>';
+      button.title = ticketSoundEnabled ? 'Matikan suara notifikasi' : 'Aktifkan suara notifikasi';
+    }
+
+    function enableTicketSound() {
+      if (!ticketSoundContext) ticketSoundContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (ticketSoundContext.state === 'suspended') ticketSoundContext.resume();
+      ticketSoundEnabled = !ticketSoundEnabled;
+      localStorage.setItem('tech_ticket_sound', ticketSoundEnabled ? 'on' : 'off');
+      updateTicketSoundButton();
+    }
+
+    function playTicketSound() {
+      if (!ticketSoundEnabled || !ticketSoundContext) return;
+      const oscillator = ticketSoundContext.createOscillator();
+      const gain = ticketSoundContext.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ticketSoundContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ticketSoundContext.currentTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ticketSoundContext.currentTime + 0.35);
+      oscillator.connect(gain).connect(ticketSoundContext.destination);
+      oscillator.start();
+      oscillator.stop(ticketSoundContext.currentTime + 0.4);
+    }
+
+    async function refreshPoolTicketCount() {
+      try {
+        const response = await fetch('/tech/api/tickets/notifications', { cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        const poolCount = Number(data.pool || 0);
+        const badge = document.getElementById('tech-pool-count');
+        const pageCount = document.getElementById('pool-ticket-count');
+        if (badge) { badge.textContent = poolCount; badge.style.display = poolCount > 0 ? '' : 'none'; }
+        if (pageCount) pageCount.textContent = poolCount;
+        if (poolCount > lastPoolTicketCount) playTicketSound();
+        lastPoolTicketCount = poolCount;
+      } catch (e) {}
+    }
+
+    document.getElementById('ticket-sound-toggle')?.addEventListener('click', enableTicketSound);
+    document.addEventListener('click', () => {
+      if (!ticketSoundEnabled || ticketSoundContext) return;
+      ticketSoundContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (ticketSoundContext.state === 'suspended') ticketSoundContext.resume();
+    }, { passive: true });
+    updateTicketSoundButton();
+    refreshPoolTicketCount();
+    setInterval(refreshPoolTicketCount, 15000);
+
     setTimeout(() => {
       document.querySelectorAll('.alert').forEach(a => {
         const bsAlert = new bootstrap.Alert(a);

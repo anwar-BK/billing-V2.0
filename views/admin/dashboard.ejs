@@ -63,6 +63,20 @@
   </div>
 
   <div class="page">
+    <a href="/admin/update" id="github-update-notification" class="card" style="display:none;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;border-color:var(--info);text-decoration:none;color:inherit">
+      <div style="display:flex;align-items:center;gap:12px">
+        <i class="bi bi-cloud-arrow-down-fill" style="font-size:24px;color:var(--info)"></i>
+        <div><div class="fw6">Update aplikasi tersedia</div><div id="github-update-detail" class="text-muted" style="font-size:12px">Versi baru tersedia dari GitHub.</div></div>
+      </div>
+      <span class="badge bp"><i class="bi bi-arrow-up-circle"></i> Update</span>
+    </a>
+    <a href="/admin/tickets?status=open" class="card" id="ticket-notification-card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;border-color:<%= (ticketNotificationCount || 0) > 0 ? 'var(--warning)' : 'var(--border)' %>;text-decoration:none;color:inherit">
+      <div style="display:flex;align-items:center;gap:12px">
+        <i class="bi bi-bell-fill" style="font-size:24px;color:var(--warning)"></i>
+        <div><div class="fw6">Notifikasi Tiket</div><div class="text-muted" style="font-size:12px">Tiket baru yang menunggu penanganan</div></div>
+      </div>
+      <span class="badge <%= (ticketNotificationCount || 0) > 0 ? 'bw' : 'bp' %>" id="ticket-notification-count"><%= ticketNotificationCount || 0 %></span>
+    </a>
     <!-- TAB NAVIGATION -->
     <div class="tab-bar">
       <button class="tab-btn active" id="tab-dash" onclick="showTab('dashboard')">
@@ -1134,6 +1148,42 @@ async function deleteMonDevice(deviceId, acsId) {
     showToast('Gagal menghapus perangkat: ' + err.message, 'd');
   }
 }
+
+async function refreshTicketNotifications() {
+  try {
+    const response = await fetch('/admin/api/tickets/notifications', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    const count = Number(data.count || 0);
+    const badge = document.getElementById('ticket-notification-count');
+    const card = document.getElementById('ticket-notification-card');
+    if (badge) { badge.textContent = count; badge.className = 'badge ' + (count > 0 ? 'bw' : 'bp'); }
+    if (card) card.style.borderColor = count > 0 ? 'var(--warning)' : 'var(--border)';
+  } catch (e) {}
+}
+
+async function refreshGithubUpdateNotification() {
+  try {
+    const response = await fetch('/admin/api/update/notifications', { cache: 'no-store' });
+    if (!response.ok) return;
+    const info = await response.json();
+    const card = document.getElementById('github-update-notification');
+    const detail = document.getElementById('github-update-detail');
+    if (!card) return;
+    card.style.display = info.needsUpdate ? 'flex' : 'none';
+    if (detail && info.needsUpdate) {
+      const from = info.localCommit && info.remoteCommit && info.localCommit !== '-' && info.remoteCommit !== '-'
+        ? `Commit ${info.localCommit} ke ${info.remoteCommit}`
+        : `Versi ${info.remoteVersion || 'baru'} tersedia`;
+      detail.textContent = `${from}. Buka halaman Update untuk menerapkan.`;
+    }
+  } catch (e) {}
+}
+
+refreshTicketNotifications();
+setInterval(refreshTicketNotifications, 30000);
+refreshGithubUpdateNotification();
+setInterval(refreshGithubUpdateNotification, 60000);
 
 </script>
 </body>

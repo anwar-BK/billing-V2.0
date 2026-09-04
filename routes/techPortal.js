@@ -8,6 +8,8 @@ const mikrotikService = require('../services/mikrotikService');
 const db = require('../config/database');
 const oltSvc = require('../services/oltService');
 const attendanceSvc = require('../services/attendanceService');
+const inventorySvc = require('../services/inventoryService');
+const ticketSvc = require('../services/ticketService');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -116,6 +118,33 @@ function flashMsg(req) {
 
 function company() { return getSetting('company_header', 'ISP App'); }
 
+function bodyArray(value) {
+  return Array.isArray(value) ? value : (value === undefined ? [] : [value]);
+}
+
+function getInventoryMovements(body) {
+  const movements = [];
+  const outItems = bodyArray(body.stock_out_item_id);
+  const outQty = bodyArray(body.stock_out_quantity);
+  const outSerials = bodyArray(body.stock_out_serial_number);
+  outItems.forEach((itemId, index) => {
+    if (itemId && Number(outQty[index] || 0) > 0) movements.push({
+      type: 'out', item_id: Number(itemId), quantity: Number(outQty[index]),
+      serial_number: outSerials[index] || '', note: body.stock_note || 'Material pekerjaan teknisi'
+    });
+  });
+  const inItems = bodyArray(body.stock_in_item_id);
+  const inQty = bodyArray(body.stock_in_quantity);
+  const inSerials = bodyArray(body.stock_in_serial_number);
+  inItems.forEach((itemId, index) => {
+    if (itemId && Number(inQty[index] || 0) > 0) movements.push({
+      type: 'in', item_id: Number(itemId), quantity: Number(inQty[index]),
+      serial_number: inSerials[index] || '', condition: 'used', note: body.stock_note || 'Alat dicabut / stok kembali'
+    });
+  });
+  return movements;
+}
+
 router.use((req, res, next) => {
   res.locals.session = req.session;
   res.locals.settings = getSettings();
@@ -123,6 +152,9 @@ router.use((req, res, next) => {
   res.locals.formatTimeLocal = formatTimeLocal;
   res.locals.parseDateInTimezone = parseDateInTimezone;
   res.locals.getNowLocal = getNowLocal;
+  res.locals.ticketNotifications = req.session?.isTechnician && req.session?.techId
+    ? ticketSvc.getTechnicianNotificationCount(req.session.techId)
+    : { pool: 0, assigned: 0, total: 0 };
   next();
 });
 
@@ -162,6 +194,7 @@ router.get('/', requireTechSession, (req, res) => {
   const techId = req.session.techId;
   const stats = techSvc.getTechStats(techId);
   const myTickets = techSvc.getAssignedTickets(techId);
+  const ticketNotifications = ticketSvc.getTechnicianNotificationCount(techId);
   
   res.render('tech/dashboard', {
     title: 'Dashboard Teknisi', 
@@ -170,8 +203,15 @@ router.get('/', requireTechSession, (req, res) => {
     activePage: 'dashboard',
     stats,
     tickets: myTickets,
+    inventoryItems: inventorySvc.getAllItems(),
+    availableInventoryItems: inventorySvc.getAvailableItems(),
+    ticketNotifications,
     msg: flashMsg(req)
   });
+});
+
+router.get('/api/tickets/notifications', requireTechSession, (req, res) => {
+  res.json(ticketSvc.getTechnicianNotificationCount(req.session.techId));
 });
 
 // --- OPEN TICKETS (Pool) ---
@@ -231,6 +271,11 @@ router.post('/tickets/:id/update', requireTechSession, upload.array('photos', 10
     const { status, notes } = req.body;
     const ticketId = req.params.id;
     const techId = req.session.techId;
+    const inventoryMovements = getInventoryMovements(req.body);
+
+    if (inventoryMovements.length) {
+      inventorySvc.recordMovements(inventoryMovements, req.session.techName || 'Teknisi');
+    }
     
     // Prepare photo data
     let photoPaths = [];
@@ -357,6 +402,7 @@ router.get('/customers/new', requireTechSession, (req, res) => {
     odps,
     routers,
     olts,
+    inventoryItems: inventorySvc.getAvailableItems(),
     msg: flashMsg(req)
   });
 });
@@ -410,6 +456,11 @@ router.post('/customers', requireTechSession, express.urlencoded({ extended: tru
     }
 
     const inserted = customerSvc.createCustomer(customerData);
+
+    const inventoryMovements = getInventoryMovements(req.body);
+    if (inventoryMovements.length) {
+      inventorySvc.recordMovements(inventoryMovements, req.session.techName || 'Teknisi');
+    }
 
     if (customerData.pppoe_username) {
       let targetProfile = '';

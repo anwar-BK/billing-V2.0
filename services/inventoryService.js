@@ -103,6 +103,89 @@ function addStock(data, actor = 'Admin') {
   return run();
 }
 
+function getAvailableItems() {
+  return getAllItems().filter(item => Number(item.stock_available || 0) > 0);
+}
+
+function consumeStock(data, actor = 'Admin') {
+  const itemId = Number(data.item_id);
+  const quantity = Number(data.quantity);
+  const serialNumber = String(data.serial_number || '').trim();
+  const note = String(data.note || 'Stock Keluar');
+  if (!itemId || !Number.isInteger(quantity) || quantity < 1) {
+    throw new Error('Barang dan jumlah stok keluar wajib diisi dengan benar');
+  }
+
+  const run = db.transaction(() => {
+    let stocks = db.prepare(`
+      SELECT * FROM inventory_stock
+      WHERE item_id = ? AND status = 'available' AND quantity > 0
+        ${serialNumber ? 'AND serial_number = ?' : ''}
+      ORDER BY created_at ASC
+    `).all(...(serialNumber ? [itemId, serialNumber] : [itemId]));
+    const available = stocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
+    if (available < quantity) throw new Error(`Stok tersedia tidak cukup (tersisa ${available})`);
+
+    let remaining = quantity;
+    for (const stock of stocks) {
+      if (remaining < 1) break;
+      const used = Math.min(remaining, Number(stock.quantity));
+      db.prepare(`
+        UPDATE inventory_stock
+        SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(used, stock.id);
+      db.prepare(`
+        INSERT INTO inventory_logs (item_id, stock_id, type, quantity, actor, note)
+        VALUES (?, ?, 'out', ?, ?, ?)
+      `).run(itemId, stock.id, -used, actor, note);
+      remaining -= used;
+    }
+  });
+
+  return run();
+}
+
+function returnStock(data, actor = 'Admin') {
+  const itemId = Number(data.item_id);
+  const quantity = Number(data.quantity);
+  const serialNumber = String(data.serial_number || '').trim();
+  const condition = data.condition || 'used';
+  const note = data.note || 'Stock Kembali';
+  if (!itemId || !Number.isInteger(quantity) || quantity < 1) {
+    throw new Error('Barang dan jumlah stok kembali wajib diisi dengan benar');
+  }
+
+  if (!serialNumber) return addStock({ ...data, item_id: itemId, quantity, condition, note }, actor);
+
+  const existing = db.prepare('SELECT * FROM inventory_stock WHERE item_id = ? AND serial_number = ?').get(itemId, serialNumber);
+  if (!existing) return addStock({ ...data, item_id: itemId, quantity, condition, note }, actor);
+
+  const run = db.transaction(() => {
+    db.prepare(`
+      UPDATE inventory_stock
+      SET quantity = quantity + ?, condition = ?, status = 'available',
+          assigned_to_customer_id = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(quantity, condition, existing.id);
+    db.prepare(`
+      INSERT INTO inventory_logs (item_id, stock_id, type, quantity, actor, note)
+      VALUES (?, ?, 'in', ?, ?, ?)
+    `).run(itemId, existing.id, quantity, actor, note);
+  });
+  return run();
+}
+
+function recordMovements(movements, actor = 'Admin') {
+  const run = db.transaction(() => {
+    for (const movement of movements || []) {
+      if (movement.type === 'out') consumeStock(movement, actor);
+      if (movement.type === 'in') returnStock(movement, actor);
+    }
+  });
+  return run();
+}
+
 function assignStockToCustomer(stockId, customerId, actor = 'Admin', note = '') {
   const stock = db.prepare('SELECT * FROM inventory_stock WHERE id = ?').get(stockId);
   if (!stock) throw new Error('Stock tidak ditemukan');
@@ -166,6 +249,7 @@ function getLowStockItems() {
 module.exports = {
   getAllCategories, createCategory, updateCategory, deleteCategory,
   getAllItems, getItemById, createItem, updateItem, deleteItem,
-  getStockByItem, addStock, assignStockToCustomer, adjustStock,
+  getAvailableItems, getStockByItem, addStock, consumeStock, returnStock, recordMovements,
+  assignStockToCustomer, adjustStock,
   getInventoryLogs, getLowStockItems
 };

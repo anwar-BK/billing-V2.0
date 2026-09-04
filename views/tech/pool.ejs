@@ -5,8 +5,8 @@
     <h5 class="mb-0 fw-bold"><%= t('tech.pool.title', 'Tiket Baru') %></h5>
     <div class="text-secondary" style="font-size: 12px;"><%= t('tech.pool.subtitle', 'Daftar keluhan yang belum ditangani') %></div>
   </div>
-  <div class="bg-danger bg-opacity-25 text-danger rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; font-weight: bold;">
-    <%= tickets.length %>
+  <div id="pool-ticket-count" class="bg-danger bg-opacity-25 text-danger rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; font-weight: bold;">
+    <%= ticketNotifications ? ticketNotifications.pool : tickets.length %>
   </div>
 </div>
 
@@ -43,5 +43,25 @@
     </div>
   <% }) %>
 <% } %>
+
+<script>
+  const initialPoolTicketCount = <%= tickets.length %>;
+  let poolRefreshInProgress = false;
+
+  async function refreshPoolTicketList() {
+    if (poolRefreshInProgress) return;
+    try {
+      const response = await fetch('/tech/api/tickets/notifications', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (Number(data.pool || 0) !== initialPoolTicketCount) {
+        poolRefreshInProgress = true;
+        window.location.reload();
+      }
+    } catch (e) {}
+  }
+
+  setInterval(refreshPoolTicketList, 10000);
+</script>
 
 <%- include('partials/bottom_nav') %>

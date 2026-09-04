@@ -2,9 +2,11 @@ const db = require('../config/database');
 
 function getAllTickets(status = null) {
   let query = `
-    SELECT t.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, tech.name as technician_name
+        SELECT t.*, COALESCE(NULLIF(t.manual_customer_name, ''), c.name) as customer_name,
+          COALESCE(NULLIF(t.manual_customer_phone, ''), c.phone) as customer_phone,
+          c.address as customer_address, tech.name as technician_name
     FROM tickets t
-    JOIN customers c ON t.customer_id = c.id
+        LEFT JOIN customers c ON t.customer_id = c.id
     LEFT JOIN technicians tech ON t.technician_id = tech.id
   `;
   
@@ -29,27 +31,31 @@ function getTicketsByCustomerId(customerId) {
 
 function getTicketById(id) {
   return db.prepare(`
-    SELECT t.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, tech.name as technician_name
+        SELECT t.*, COALESCE(NULLIF(t.manual_customer_name, ''), c.name) as customer_name,
+          COALESCE(NULLIF(t.manual_customer_phone, ''), c.phone) as customer_phone,
+          c.address as customer_address, tech.name as technician_name
     FROM tickets t
-    JOIN customers c ON t.customer_id = c.id
+        LEFT JOIN customers c ON t.customer_id = c.id
     LEFT JOIN technicians tech ON t.technician_id = tech.id
     WHERE t.id = ?
   `).get(id);
 }
 
 function createTicket(customerId, subject, message, extraData = {}) {
-  const { customerPhotos, customerPhotoMetadata } = extraData;
+  const { customerPhotos, customerPhotoMetadata, technicianId, status, manualCustomerName, manualCustomerPhone } = extraData;
+  const assignedTechnicianId = technicianId ? Number(technicianId) : null;
+  const ticketStatus = status || (assignedTechnicianId ? 'in_progress' : 'open');
   
   if (customerPhotos || customerPhotoMetadata) {
     return db.prepare(`
-      INSERT INTO tickets (customer_id, subject, message, customer_photos, customer_photo_metadata)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(customerId, subject, message, customerPhotos || '', customerPhotoMetadata || '');
+      INSERT INTO tickets (customer_id, manual_customer_name, manual_customer_phone, subject, message, status, technician_id, customer_photos, customer_photo_metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(customerId || null, manualCustomerName || '', manualCustomerPhone || '', subject, message, ticketStatus, assignedTechnicianId, customerPhotos || '', customerPhotoMetadata || '');
   } else {
     return db.prepare(`
-      INSERT INTO tickets (customer_id, subject, message)
-      VALUES (?, ?, ?)
-    `).run(customerId, subject, message);
+      INSERT INTO tickets (customer_id, manual_customer_name, manual_customer_phone, subject, message, status, technician_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(customerId || null, manualCustomerName || '', manualCustomerPhone || '', subject, message, ticketStatus, assignedTechnicianId);
   }
 }
 
@@ -80,6 +86,16 @@ function getTicketStats() {
   return { open, inProgress, resolved, total: open + inProgress + resolved };
 }
 
+function getAdminNotificationCount() {
+  return db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status = 'open'").get().count;
+}
+
+function getTechnicianNotificationCount(technicianId) {
+  const pool = db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status = 'open'").get().count;
+  const assigned = db.prepare("SELECT COUNT(*) as count FROM tickets WHERE technician_id = ? AND status = 'in_progress'").get(technicianId).count;
+  return { pool, assigned, total: pool + assigned };
+}
+
 module.exports = {
   getAllTickets,
   getTicketsByCustomerId,
@@ -87,5 +103,7 @@ module.exports = {
   createTicket,
   updateTicketStatus,
   deleteTicket,
-  getTicketStats
+  getTicketStats,
+  getAdminNotificationCount,
+  getTechnicianNotificationCount
 };

@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const GITHUB_REPO_URL = 'https://github.com/anwar-BK/billing-V2.0.git';
 const XLSX = require('xlsx');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
@@ -350,12 +351,21 @@ function getGitDefaultBranch(repoRoot) {
     const m = ref.match(/refs\/remotes\/origin\/(.+)$/);
     if (m && m[1]) return m[1].trim();
   }
+  const master = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/master'], repoRoot);
+  if (master.ok) return 'master';
   return 'main';
+}
+
+function ensureGithubOrigin(repoRoot) {
+  const remote = runCmd('git', ['remote', 'get-url', 'origin'], repoRoot);
+  if (remote.ok) return true;
+  const added = runCmd('git', ['remote', 'add', 'origin', GITHUB_REPO_URL], repoRoot);
+  return added.ok;
 }
 
 function getUpdateInfo(repoRoot) {
   const localVersion = readTextFileSafe(path.join(repoRoot, 'version.txt')) || '-';
-  const info = { localVersion, remoteVersion: '-', branch: '-', needsUpdate: false, error: '' };
+  const info = { localVersion, remoteVersion: '-', localCommit: '-', remoteCommit: '-', branch: '-', needsUpdate: false, error: '' };
 
   const inside = runCmd('git', ['rev-parse', '--is-inside-work-tree'], repoRoot);
   if (!inside.ok) {
@@ -363,8 +373,16 @@ function getUpdateInfo(repoRoot) {
     return info;
   }
 
+  if (!ensureGithubOrigin(repoRoot)) {
+    info.error = 'Remote GitHub belum tersedia: ' + GITHUB_REPO_URL;
+    return info;
+  }
+
   const branch = getGitDefaultBranch(repoRoot);
   info.branch = branch;
+
+  const localCommit = runCmd('git', ['rev-parse', 'HEAD'], repoRoot);
+  info.localCommit = String(localCommit.stdout || '').trim().slice(0, 12) || '-';
 
   const fetch = runCmd('git', ['fetch', '--prune'], repoRoot);
   if (!fetch.ok) {
@@ -380,7 +398,10 @@ function getUpdateInfo(repoRoot) {
 
   const remoteVersion = String(remote.stdout || '').trim() || '-';
   info.remoteVersion = remoteVersion;
-  info.needsUpdate = Boolean(remoteVersion && remoteVersion !== '-' && remoteVersion !== localVersion);
+  const remoteCommit = runCmd('git', ['rev-parse', `origin/${branch}`], repoRoot);
+  info.remoteCommit = String(remoteCommit.stdout || '').trim().slice(0, 12) || '-';
+  info.needsUpdate = Boolean(info.remoteCommit !== '-' && info.remoteCommit !== info.localCommit)
+    || Boolean(remoteVersion && remoteVersion !== '-' && remoteVersion !== localVersion);
   return info;
 }
 
@@ -567,6 +588,14 @@ router.post('/login', loginRateLimiter, express.urlencoded({ extended: true }), 
   if (username === getSetting('admin_username', 'admin') && password === getSetting('admin_password', 'admin123')) {
     req.session.isAdmin = true;
     req.session.adminUser = username;
+    return res.redirect('/admin');
+  }
+
+  const adminUser = adminSvc.authenticateAdmin(username, password);
+  if (adminUser) {
+    req.session.isAdmin = true;
+    req.session.adminUser = adminUser.username;
+    req.session.adminName = adminUser.name;
     return res.redirect('/admin');
   }
   
@@ -963,6 +992,48 @@ router.post('/cashiers/:id/delete', requireAdminSession, restrictToAdmin, (req, 
   adminSvc.deleteCashier(req.params.id);
   req.session._msg = { type: 'success', text: 'Kasir berhasil dihapus.' };
   res.redirect('/admin/cashiers');
+});
+
+// --- ADMIN ACCOUNT MANAGEMENT ---
+router.get('/admin-users', requireAdminSession, requireSidebarMenuAccess('admin_users'), restrictToAdmin, (req, res) => {
+  res.render('admin/settings', {
+    title: 'Akun Admin',
+    company: company(),
+    activePage: 'admin_users',
+    adminUsers: adminSvc.getAllAdminUsers(),
+    viewMode: 'admin_users',
+    msg: flashMsg(req)
+  });
+});
+
+router.post('/admin-users', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    adminSvc.createAdminUser(req.body);
+    req.session._msg = { type: 'success', text: 'Akun admin berhasil dibuat.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal membuat akun admin: ' + e.message };
+  }
+  res.redirect('/admin/admin-users');
+});
+
+router.post('/admin-users/:id/update', requireAdminSession, restrictToAdmin, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    adminSvc.updateAdminUser(req.params.id, req.body);
+    req.session._msg = { type: 'success', text: 'Akun admin berhasil diperbarui.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal memperbarui akun admin: ' + e.message };
+  }
+  res.redirect('/admin/admin-users');
+});
+
+router.post('/admin-users/:id/delete', requireAdminSession, restrictToAdmin, (req, res) => {
+  try {
+    adminSvc.deleteAdminUser(req.params.id);
+    req.session._msg = { type: 'success', text: 'Akun admin berhasil dihapus.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal menghapus akun admin: ' + e.message };
+  }
+  res.redirect('/admin/admin-users');
 });
 
 // --- COLLECTOR MANAGEMENT ---
@@ -1482,9 +1553,10 @@ router.get('/', requireAdminSession, requireSidebarMenuAccess('dashboard'), asyn
     const billing = billingSvc.getDashboardStats();
     const custStats = customerSvc.getCustomerStats();
     const settings = getSettings(); // Get current settings
+    const ticketNotificationCount = ticketSvc.getAdminNotificationCount();
     res.render('admin/dashboard', {
       title: 'Dashboard', company: company(), version: '2.0.0',
-      activePage: 'dashboard', billing, custStats, settings
+      activePage: 'dashboard', billing, custStats, settings, ticketNotificationCount
     });
   } catch (e) {
     logger.error('Admin dashboard error:', e);
@@ -1496,6 +1568,10 @@ router.get('/', requireAdminSession, requireSidebarMenuAccess('dashboard'), asyn
 router.get('/devices', requireAdminSession, (req, res) => {
   const settings = getSettings();
   res.render('admin/dashboard', { title: 'Monitoring ONU', company: company(), version: '2.0.0', activePage: 'devices', billing: null, custStats: null, settings });
+});
+
+router.get('/api/tickets/notifications', requireAdminSession, (req, res) => {
+  res.json({ count: ticketSvc.getAdminNotificationCount() });
 });
 
 router.get('/bulk', requireAdminSession, (req, res) => {
@@ -2869,15 +2945,38 @@ router.post('/billing/:id/delete', requireAdminSession, (req, res) => {
 
 // ─── TICKETS ───────────────────────────────────────────────────────────────
 const ticketSvc = require('../services/ticketService');
+const techSvcForTickets = require('../services/techService');
 
 router.get('/tickets', requireAdminSession, requireSidebarMenuAccess('tickets'), (req, res) => {
   const { status = 'all' } = req.query;
   const tickets = ticketSvc.getAllTickets(status);
   const stats = ticketSvc.getTicketStats();
+  const ticketCustomers = customerSvc.getAllCustomers();
+  const ticketTechnicians = techSvcForTickets.getAllTechnicians().filter(tech => tech.is_active);
   res.render('admin/tickets', {
     title: 'Keluhan Pelanggan', company: company(), activePage: 'tickets',
-    tickets, stats, filterStatus: status, msg: flashMsg(req)
+    tickets, stats, filterStatus: status, msg: flashMsg(req), ticketCustomers, ticketTechnicians
   });
+});
+
+router.post('/tickets/create', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    const isManualCustomer = req.body.customer_id === 'manual';
+    const customerId = isManualCustomer ? null : Number(req.body.customer_id);
+    const manualCustomerName = String(req.body.manual_customer_name || '').trim();
+    const manualCustomerPhone = String(req.body.manual_customer_phone || '').trim();
+    const subject = String(req.body.subject || '').trim();
+    const message = String(req.body.message || '').trim();
+    const technicianId = req.body.technician_id ? Number(req.body.technician_id) : null;
+    if (isManualCustomer ? !manualCustomerName : !customerId) throw new Error('Pilih pelanggan atau isi nama pelanggan manual');
+    if (!subject || !message) throw new Error('Subjek dan detail tiket wajib diisi');
+    if (technicianId && !techSvcForTickets.getTechById(technicianId)) throw new Error('Teknisi tidak valid');
+    ticketSvc.createTicket(customerId, subject, message, { technicianId, manualCustomerName, manualCustomerPhone });
+    req.session._msg = { type: 'success', text: technicianId ? 'Tiket dibuat dan ditugaskan ke teknisi.' : 'Tiket berhasil dibuat dan masuk ke pool teknisi.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal membuat tiket: ' + e.message };
+  }
+  res.redirect('/admin/tickets');
 });
 
 router.post('/tickets/:id/update', requireAdminSession, express.urlencoded({ extended: true }), async (req, res) => {
@@ -3446,6 +3545,20 @@ router.get('/update', requireAdminSession, requireSidebarMenuAccess('update'), r
   });
 });
 
+router.get('/api/update/notifications', requireAdminSession, restrictToAdmin, (req, res) => {
+  const repoRoot = path.resolve(__dirname, '..');
+  const info = getUpdateInfo(repoRoot);
+  res.json({
+    needsUpdate: Boolean(info.needsUpdate),
+    localVersion: info.localVersion,
+    remoteVersion: info.remoteVersion,
+    localCommit: info.localCommit,
+    remoteCommit: info.remoteCommit,
+    branch: info.branch,
+    error: info.error || ''
+  });
+});
+
 router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
   const repoRoot = path.resolve(__dirname, '..');
   const log = [];
@@ -3517,6 +3630,7 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
     const inside = runCmd('git', ['rev-parse', '--is-inside-work-tree'], repoRoot);
     pushCmd('git rev-parse --is-inside-work-tree', inside);
     if (!inside.ok) throw new Error('Folder ini belum menjadi git repository.');
+    if (!ensureGithubOrigin(repoRoot)) throw new Error('Remote GitHub belum tersedia: ' + GITHUB_REPO_URL);
 
     const fetch = runCmd('git', ['fetch', '--prune'], repoRoot);
     pushCmd('git fetch --prune', fetch);
@@ -3527,7 +3641,12 @@ router.post('/update/run', requireAdminSession, restrictToAdmin, (req, res) => {
     if (!remote.ok) throw new Error('Tidak bisa membaca version.txt dari GitHub.');
     const remoteVersion = String(remote.stdout || '').trim() || '-';
 
-    if (remoteVersion !== '-' && remoteVersion === localBefore) {
+    const localCommit = runCmd('git', ['rev-parse', 'HEAD'], repoRoot);
+    const remoteCommit = runCmd('git', ['rev-parse', `origin/${branch}`], repoRoot);
+    const localCommitValue = String(localCommit.stdout || '').trim();
+    const remoteCommitValue = String(remoteCommit.stdout || '').trim();
+
+    if (remoteVersion !== '-' && remoteVersion === localBefore && remoteCommitValue && remoteCommitValue === localCommitValue) {
       req.session._msg = { type: 'success', text: 'Versi sudah terbaru: ' + localBefore };
       req.session._updateLog = log.join('\n');
       return res.redirect('/admin/update');
@@ -3858,6 +3977,16 @@ router.post('/inventory/stock/add', requireAdminSession, express.urlencoded({ ex
   try {
     inventorySvc.addStock(req.body, req.session.adminUser || 'Admin');
     req.session._msg = { type: 'success', text: 'Stok berhasil ditambahkan.' };
+  } catch (e) {
+    req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
+  }
+  res.redirect('/admin/inventory');
+});
+
+router.post('/inventory/stock/out', requireAdminSession, express.urlencoded({ extended: true }), (req, res) => {
+  try {
+    inventorySvc.consumeStock(req.body, req.session.adminUser || 'Admin');
+    req.session._msg = { type: 'success', text: 'Stok keluar berhasil dicatat.' };
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal: ' + e.message };
   }

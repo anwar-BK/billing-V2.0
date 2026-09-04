@@ -1,4 +1,42 @@
+const crypto = require('crypto');
 const db = require('../config/database');
+
+function hashAdminPassword(password) {
+  return crypto.createHash('sha256').update(String(password || '')).digest('hex');
+}
+
+function getAllAdminUsers() {
+  return db.prepare('SELECT id, username, name, is_active, created_at, updated_at FROM admin_users ORDER BY name ASC').all();
+}
+
+function authenticateAdmin(username, password) {
+  const user = db.prepare('SELECT * FROM admin_users WHERE username = ? AND is_active = 1').get(String(username || '').trim());
+  if (!user || user.password_hash !== hashAdminPassword(password)) return null;
+  return user;
+}
+
+function createAdminUser(data) {
+  const username = String(data.username || '').trim();
+  const name = String(data.name || '').trim();
+  const password = String(data.password || '');
+  if (!username || !name || password.length < 6) throw new Error('Nama, username, dan password minimal 6 karakter wajib diisi');
+  return db.prepare('INSERT INTO admin_users (username, password_hash, name) VALUES (?, ?, ?)').run(username, hashAdminPassword(password), name);
+}
+
+function updateAdminUser(id, data) {
+  const username = String(data.username || '').trim();
+  const name = String(data.name || '').trim();
+  const password = String(data.password || '');
+  const isActive = Number(data.is_active) === 1 ? 1 : 0;
+  if (!username || !name) throw new Error('Nama dan username wajib diisi');
+  if (password && password.length < 6) throw new Error('Password minimal 6 karakter');
+  if (password) return db.prepare('UPDATE admin_users SET username=?, name=?, password_hash=?, is_active=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(username, name, hashAdminPassword(password), isActive, id);
+  return db.prepare('UPDATE admin_users SET username=?, name=?, is_active=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(username, name, isActive, id);
+}
+
+function deleteAdminUser(id) {
+  return db.prepare('DELETE FROM admin_users WHERE id = ?').run(id);
+}
 
 /**
  * TECHNICIANS
@@ -106,5 +144,10 @@ module.exports = {
   createCollector,
   updateCollector,
   deleteCollector,
-  authenticateCollector
+  authenticateCollector,
+  getAllAdminUsers,
+  authenticateAdmin,
+  createAdminUser,
+  updateAdminUser,
+  deleteAdminUser
 };

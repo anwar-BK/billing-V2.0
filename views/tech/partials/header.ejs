@@ -131,6 +131,31 @@
       margin-top: 10px;
     }
 
+    .resolve-modal .modal-dialog {
+      height: calc(100vh - 1rem);
+      max-height: calc(100vh - 1rem);
+      margin: .5rem auto;
+    }
+
+    .resolve-modal .modal-content {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 1rem);
+      max-height: calc(100vh - 1rem);
+    }
+
+    .resolve-modal .modal-body {
+      min-height: 0;
+      max-height: calc(100vh - 8rem);
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .remove-stock-row {
+      min-width: 38px;
+    }
+
     /* Stats Grid */
     .stat-grid {
       display: grid;
@@ -170,6 +195,7 @@
       <a href="/lang/id" class="top-nav-btn" title="Bahasa Indonesia" style="font-size:12px;font-weight:700">ID</a>
       <a href="/lang/en" class="top-nav-btn" title="English" style="font-size:12px;font-weight:700">EN</a>
       <a href="/tech/customers/new" class="top-nav-btn" title="<%= t('tech.new_customer', 'Tambah Pelanggan') %>"><i class="bi bi-person-plus-fill"></i></a>
+      <button type="button" id="ticket-sound-toggle" class="top-nav-btn" title="Aktifkan suara notifikasi"><i class="bi bi-volume-mute-fill"></i></button>
       <a href="/tech/logout" class="top-nav-btn" onclick="return confirm('<%= t('tech.logout_confirm', 'Apakah Anda yakin ingin logout?') %>')"><i class="bi bi-box-arrow-right"></i></a>
     </div>
   </div>

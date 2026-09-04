@@ -53,6 +53,7 @@ const MENU_DEFINITIONS = [
 
   { key: 'technicians', section: 'user_management', href: '/admin/technicians', icon: 'bi bi-person-gear', labelKey: 'admin.nav.technicians', labelDefault: 'Teknisi', roles: ['admin'], activePages: ['technicians'] },
   { key: 'cashiers', section: 'user_management', href: '/admin/cashiers', icon: 'bi bi-person-vcard', labelKey: 'admin.nav.cashiers', labelDefault: 'Kasir', roles: ['admin'], activePages: ['cashiers'] },
+  { key: 'admin_users', section: 'user_management', href: '/admin/admin-users', icon: 'bi bi-person-lock', labelDefault: 'Akun Admin', roles: ['admin'], activePages: ['admin_users'] },
   { key: 'collectors', section: 'user_management', href: '/admin/collectors', icon: 'bi bi-person-badge', labelKey: 'admin.nav.collectors', labelDefault: 'Kolektor', roles: ['admin'], activePages: ['collectors'] },
   { key: 'agents', section: 'user_management', href: '/admin/agents', icon: 'bi bi-person-badge', labelKey: 'admin.nav.agents', labelDefault: 'Agent', roles: ['admin', 'cashier'], activePages: ['agents'] },
   { key: 'agents_reports', section: 'user_management', href: '/admin/agents/reports', icon: 'bi bi-journal-text', labelKey: 'admin.nav.agent_reports', labelDefault: 'Laporan Agent', roles: ['admin'], activePages: ['agents_reports'] },
@@ -93,6 +94,7 @@ const DEFAULT_MENU_STATES = {
   cashier_attendance: STATE_VISIBLE,
   technicians: STATE_VISIBLE,
   cashiers: STATE_VISIBLE,
+  admin_users: STATE_VISIBLE,
   collectors: STATE_VISIBLE,
   agents: STATE_VISIBLE,
   agents_reports: STATE_VISIBLE,

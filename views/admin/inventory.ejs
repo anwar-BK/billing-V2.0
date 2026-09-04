@@ -91,6 +91,7 @@
                     <div class="flex jc-fe gap">
                       <button class="btn btn-g btn-icon" <%- `onclick="viewStock(${item.id}, '${item.name}')"` %> title="Detail Stok"><i class="bi bi-eye"></i></button>
                       <button class="btn btn-g btn-icon" <%- `onclick="openAddStock(${item.id}, '${item.name}')"` %> title="Tambah Stok"><i class="bi bi-plus-circle"></i></button>
+                      <button class="btn btn-g btn-icon" <%- `onclick="openOutStock(${item.id}, '${item.name}')"` %> title="Stok Keluar"><i class="bi bi-dash-circle"></i></button>
                       <button class="btn btn-g btn-icon" <%- `onclick='openEditItem(${JSON.stringify(item)})'` %> title="Edit"><i class="bi bi-pencil"></i></button>
                     </div>
                   </td>
@@ -247,6 +248,23 @@
   </div>
 </div>
 
+<!-- MODAL: STOCK OUT -->
+<div class="mo" id="modal-stock-out">
+  <div class="mb">
+    <div class="mh"><div class="mt">Input Stok Keluar</div><button class="mc" onclick="closeModal('modal-stock-out')">&times;</button></div>
+    <form action="/admin/inventory/stock/out" method="POST">
+      <input type="hidden" name="item_id" id="o_item_id">
+      <div class="mbody">
+        <div class="fg"><label class="fl">Nama Barang</label><input class="fc" id="o_item_name" readonly></div>
+        <div class="fg"><label class="fl">Serial Number (Opsional)</label><input class="fc" name="serial_number" placeholder="Isi untuk alat tertentu"></div>
+        <div class="fg"><label class="fl">Jumlah (Qty)</label><input class="fc" type="number" name="quantity" value="1" min="1" required></div>
+        <div class="fg"><label class="fl">Catatan</label><textarea class="fc" name="note" placeholder="Contoh: Dipakai untuk pemasangan pelanggan"></textarea></div>
+      </div>
+      <div class="mf"><button type="button" class="btn btn-g" onclick="closeModal('modal-stock-out')">Batal</button><button class="btn btn-p">Catat Stok Keluar</button></div>
+    </form>
+  </div>
+</div>
+
 <script>
   function showTab(tab) {
     document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
@@ -279,6 +297,12 @@
     document.getElementById('s_item_id').value = itemId;
     document.getElementById('s_item_name').value = itemName;
     document.getElementById('modal-stock').classList.add('show');
+  }
+
+  function openOutStock(itemId, itemName) {
+    document.getElementById('o_item_id').value = itemId;
+    document.getElementById('o_item_name').value = itemName;
+    document.getElementById('modal-stock-out').classList.add('show');
   }
 
   function closeModal(id) { document.getElementById(id).classList.remove('show'); }

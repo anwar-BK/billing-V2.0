@@ -12,6 +12,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-headset"></i> <%= t('admin.nav.customer_tickets', 'Keluhan Pelanggan') %></div>
     <div class="tb-right">
+      <button class="btn btn-p btn-sm" onclick="openModal('createTicketModal')"><i class="bi bi-plus-lg"></i> Buat Tiket</button>
       <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
@@ -123,6 +124,26 @@
   </div>
 </div>
 
+<!-- Modal Create Ticket -->
+<div class="mo" id="createTicketModal">
+  <div class="mb">
+    <div class="mh"><span class="mt"><i class="bi bi-plus-circle"></i> Buat Tiket Manual</span><button class="mc" onclick="closeModal('createTicketModal')">&times;</button></div>
+    <form method="POST" action="/admin/tickets/create">
+      <div class="mbody">
+        <div class="fg"><label class="fl">Pelanggan</label><select class="fs" name="customer_id" id="ticketCustomerSelect" required onchange="toggleManualCustomer()"><option value="">-- Pilih Pelanggan --</option><option value="manual">Input Manual (belum terdaftar)</option><% (ticketCustomers || []).forEach(customer => { %><option value="<%= customer.id %>"><%= customer.name %> - <%= customer.phone || '-' %></option><% }) %></select></div>
+        <div id="manualCustomerFields" style="display:none; padding:12px; margin-bottom:12px; border:1px solid var(--border); border-radius:8px;">
+          <div class="fg"><label class="fl">Nama Pelanggan Manual</label><input class="fc" name="manual_customer_name" id="manualCustomerName" placeholder="Nama pelanggan / calon pelanggan"></div>
+          <div class="fg"><label class="fl">Nomor Telepon</label><input class="fc" name="manual_customer_phone" placeholder="Opsional"></div>
+        </div>
+        <div class="fg"><label class="fl">Teknisi (Opsional)</label><select class="fs" name="technician_id"><option value="">Masuk ke Pool Teknisi</option><% (ticketTechnicians || []).forEach(tech => { %><option value="<%= tech.id %>"><%= tech.name %> (<%= tech.area || 'Semua area' %>)</option><% }) %></select></div>
+        <div class="fg"><label class="fl">Subjek / Jenis Pekerjaan</label><input class="fc" name="subject" required placeholder="Contoh: Pemasangan baru atau perbaikan ONU"></div>
+        <div class="fg"><label class="fl">Detail Pekerjaan</label><textarea class="fc" name="message" rows="4" required placeholder="Jelaskan pekerjaan yang harus dilakukan teknisi"></textarea></div>
+      </div>
+      <div class="mf"><button type="button" class="btn btn-g" onclick="closeModal('createTicketModal')">Batal</button><button type="submit" class="btn btn-p"><i class="bi bi-check-lg"></i> Buat Tiket</button></div>
+    </form>
+  </div>
+</div>
+
 <!-- Modal Update -->
 <div class="mo" id="updateModal">
   <div class="mb">
@@ -177,6 +198,11 @@
 <script>
 function openModal(id){document.getElementById(id).classList.add('show')}
 function closeModal(id){document.getElementById(id).classList.remove('show')}
+function toggleManualCustomer(){
+  const manual = document.getElementById('ticketCustomerSelect').value === 'manual';
+  document.getElementById('manualCustomerFields').style.display = manual ? 'block' : 'none';
+  document.getElementById('manualCustomerName').required = manual;
+}
 document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show')}));
 
 document.addEventListener('click', function(e) {

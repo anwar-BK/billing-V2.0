@@ -28,6 +28,24 @@
 
     <% const logsOnly = (typeof viewMode !== 'undefined' && viewMode === 'ewallet_logs'); %>
 
+    <% if (typeof viewMode !== 'undefined' && viewMode === 'admin_users') { %>
+    <div class="card mb16">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <h6 style="margin:0"><i class="bi bi-person-lock"></i> Akun Admin Tambahan</h6>
+        <button class="btn btn-p btn-sm" onclick="openModal('addAdminModal')"><i class="bi bi-plus-lg"></i> Tambah Akun</button>
+      </div>
+      <div class="tbl-wrap"><table class="dtbl"><thead><tr><th>Nama</th><th>Username</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
+        <% (adminUsers || []).forEach(user => { %>
+          <tr><td class="fw6"><%= user.name %></td><td><code><%= user.username %></code></td><td><span class="badge <%= user.is_active ? 'bs' : 'bd' %>"><%= user.is_active ? 'Aktif' : 'Nonaktif' %></span></td><td><button class="btn btn-g btn-icon btn-sm" onclick='editAdmin(<%- JSON.stringify(user) %>)'><i class="bi bi-pencil"></i></button> <form style="display:inline" action="/admin/admin-users/<%= user.id %>/delete" method="POST" onsubmit="return confirm('Hapus akun admin ini?')"><button class="btn btn-d btn-icon btn-sm"><i class="bi bi-trash"></i></button></form></td></tr>
+        <% }) %>
+        <% if (!(adminUsers || []).length) { %><tr><td colspan="4" class="text-center text-muted" style="padding:24px">Belum ada akun admin tambahan.</td></tr><% } %>
+      </tbody></table></div>
+    </div>
+    <div class="mo" id="addAdminModal"><div class="mb"><form action="/admin/admin-users" method="POST"><div class="mh"><span class="mt">Tambah Akun Admin</span><button type="button" class="mc" onclick="closeModal('addAdminModal')">&times;</button></div><div class="mbody"><div class="fg"><label class="fl">Nama Lengkap</label><input class="fc" name="name" required></div><div class="fg"><label class="fl">Username</label><input class="fc" name="username" required></div><div class="fg"><label class="fl">Password</label><input class="fc" type="password" name="password" minlength="6" required></div></div><div class="mf"><button type="button" class="btn btn-g" onclick="closeModal('addAdminModal')">Batal</button><button class="btn btn-p">Simpan</button></div></form></div></div>
+    <div class="mo" id="editAdminModal"><div class="mb"><form id="editAdminForm" method="POST"><div class="mh"><span class="mt">Edit Akun Admin</span><button type="button" class="mc" onclick="closeModal('editAdminModal')">&times;</button></div><div class="mbody"><div class="fg"><label class="fl">Nama Lengkap</label><input class="fc" id="editAdminName" name="name" required></div><div class="fg"><label class="fl">Username</label><input class="fc" id="editAdminUsername" name="username" required></div><div class="fg"><label class="fl">Password Baru</label><input class="fc" type="password" name="password" minlength="6" placeholder="Kosongkan jika tidak diubah"></div><div class="fg"><label class="fl">Status</label><select class="fs" id="editAdminStatus" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></div></div><div class="mf"><button type="button" class="btn btn-g" onclick="closeModal('editAdminModal')">Batal</button><button class="btn btn-p">Simpan Perubahan</button></div></form></div></div>
+    <script>function openModal(id){document.getElementById(id).classList.add('show')}function closeModal(id){document.getElementById(id).classList.remove('show')}function editAdmin(user){document.getElementById('editAdminForm').action='/admin/admin-users/'+user.id+'/update';document.getElementById('editAdminName').value=user.name;document.getElementById('editAdminUsername').value=user.username;document.getElementById('editAdminStatus').value=user.is_active?'1':'0';openModal('editAdminModal')}</script>
+    <% } %>
+
     <% if (logsOnly) { %>
     <div class="card mb16">
       <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">

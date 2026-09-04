@@ -5,6 +5,11 @@
   <div class="fs-5 fw-bold"><i class="bi bi-person-badge text-primary me-2"></i><%= techName %></div>
 </div>
 
+<a href="/tech/pool" class="alert alert-<%= (ticketNotifications && ticketNotifications.total > 0) ? 'warning' : 'secondary' %> d-flex align-items-center justify-content-between rounded-4 text-decoration-none" id="tech-ticket-notification" style="font-size:13px">
+  <span><i class="bi bi-bell-fill me-2"></i><strong id="tech-ticket-notification-text"><%= ticketNotifications && ticketNotifications.total > 0 ? `${ticketNotifications.total} notifikasi tiket` : 'Tidak ada notifikasi tiket baru' %></strong></span>
+  <span class="badge bg-dark" id="tech-ticket-notification-count"><%= ticketNotifications ? ticketNotifications.total : 0 %></span>
+</a>
+
 <div class="stat-grid">
   <div class="stat-box" style="border-left: 3px solid #f59e0b;">
     <div class="lbl"><%= t('tech.dashboard.in_progress', 'Sedang Dikerjakan') %></div>
@@ -75,7 +80,7 @@
 
       <!-- Modal Selesai -->
       <div class="modal fade" id="resolveModal<%= ticket.id %>" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable resolve-modal">
           <div class="modal-content" style="background: #1e293b; border: 1px solid #334155;">
             <div class="modal-header border-bottom border-secondary">
               <h6 class="modal-title"><i class="bi bi-check-circle me-2"></i><%= t('tech.ticket.resolve_title', 'Selesaikan Tugas') %></h6>
@@ -128,6 +133,33 @@
                 <!-- Preview Foto -->
                 <div id="photoPreview<%= ticket.id %>" class="row g-2 mb-3" style="display: none;"></div>
 
+                <div class="p-3 rounded-3 mb-3" style="background:#111827; border:1px solid #334155;">
+                  <div class="fw-bold mb-2"><i class="bi bi-box-seam text-warning me-2"></i>Pergerakan Barang</div>
+                  <div class="text-secondary small mb-2">Barang dipakai menjadi stok keluar. Alat yang dicabut menjadi stok masuk kembali.</div>
+                  <div class="small text-info mb-1">Barang Keluar / Dipakai</div>
+                  <div id="stockOutRows<%= ticket.id %>">
+                    <div class="row g-2 mb-2 stock-row">
+                      <div class="col-5"><select name="stock_out_item_id[]" class="form-select"><option value="">-- Barang --</option><% (availableInventoryItems || []).forEach(item => { %><option value="<%= item.id %>"><%= item.name %> (sisa <%= item.stock_available || 0 %>)</option><% }) %></select></div>
+                      <div class="col-3"><input name="stock_out_quantity[]" type="number" min="1" class="form-control" placeholder="Qty"></div>
+                      <div class="col-3"><input name="stock_out_serial_number[]" class="form-control" placeholder="Serial"></div>
+                      <div class="col-1"><button type="button" class="btn btn-outline-danger remove-stock-row" onclick="removeStockRow(this)" title="Hapus baris"><i class="bi bi-x"></i></button></div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-outline-info btn-sm mb-3" onclick="addStockRow('stockOutRows<%= ticket.id %>', 'out')"><i class="bi bi-plus me-1"></i>Tambah Barang Keluar</button>
+
+                  <div class="small text-success mb-1">Barang Masuk / Dicabut</div>
+                  <div id="stockInRows<%= ticket.id %>">
+                    <div class="row g-2 mb-2 stock-row">
+                      <div class="col-5"><select name="stock_in_item_id[]" class="form-select"><option value="">-- Barang --</option><% (inventoryItems || []).forEach(item => { %><option value="<%= item.id %>"><%= item.name %></option><% }) %></select></div>
+                      <div class="col-3"><input name="stock_in_quantity[]" type="number" min="1" class="form-control" placeholder="Qty"></div>
+                      <div class="col-3"><input name="stock_in_serial_number[]" class="form-control" placeholder="Serial"></div>
+                      <div class="col-1"><button type="button" class="btn btn-outline-danger remove-stock-row" onclick="removeStockRow(this)" title="Hapus baris"><i class="bi bi-x"></i></button></div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-outline-success btn-sm" onclick="addStockRow('stockInRows<%= ticket.id %>', 'in')"><i class="bi bi-plus me-1"></i>Tambah Barang Masuk</button>
+                  <input name="stock_note" class="form-control mt-2" placeholder="Catatan material (opsional)">
+                </div>
+
                 <!-- GPS Location (Hidden) -->
                 <input type="hidden" id="gpsLat<%= ticket.id %>" name="gps_lat" value="">
                 <input type="hidden" id="gpsLng<%= ticket.id %>" name="gps_lng" value="">
@@ -154,6 +186,27 @@
 <% } %>
 
 <script>
+const stockItemOptions = `<option value="">-- Barang --</option><% (inventoryItems || []).forEach(item => { %><option value="<%= item.id %>"><%= item.name %></option><% }) %>`;
+const stockAvailableOptions = `<option value="">-- Barang --</option><% (availableInventoryItems || []).forEach(item => { %><option value="<%= item.id %>"><%= item.name %> (sisa <%= item.stock_available || 0 %>)</option><% }) %>`;
+function addStockRow(containerId, direction) {
+  const container = document.getElementById(containerId);
+  const row = container.querySelector('.stock-row').cloneNode(true);
+  row.querySelectorAll('input').forEach(input => { input.value = ''; });
+  row.querySelector('select').innerHTML = direction === 'out' ? stockAvailableOptions : stockItemOptions;
+  container.appendChild(row);
+}
+
+function removeStockRow(button) {
+  const container = button.closest('[id^="stockOutRows"], [id^="stockInRows"]');
+  const rows = container.querySelectorAll('.stock-row');
+  if (rows.length > 1) {
+    button.closest('.stock-row').remove();
+    return;
+  }
+  button.closest('.stock-row').querySelector('select').value = '';
+  button.closest('.stock-row').querySelectorAll('input').forEach(input => { input.value = ''; });
+}
+
 // Preview photos before upload
 function previewPhotos(input, ticketId) {
   const previewContainer = document.getElementById('photoPreview' + ticketId);
@@ -212,6 +265,29 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 });
+
+async function refreshTechTicketNotifications() {
+  try {
+    const response = await fetch('/tech/api/tickets/notifications', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    const count = Number(data.total || 0);
+    const assignedCount = Number(data.assigned || 0);
+    if (assignedCount !== <%= ticketNotifications ? ticketNotifications.assigned : 0 %>) {
+      window.location.reload();
+      return;
+    }
+    const badge = document.getElementById('tech-ticket-notification-count');
+    const text = document.getElementById('tech-ticket-notification-text');
+    const alert = document.getElementById('tech-ticket-notification');
+    if (badge) badge.textContent = count;
+    if (text) text.textContent = count > 0 ? `${count} notifikasi tiket` : 'Tidak ada notifikasi tiket baru';
+    if (alert) alert.className = `alert alert-${count > 0 ? 'warning' : 'secondary'} d-flex align-items-center justify-content-between rounded-4 text-decoration-none`;
+  } catch (e) {}
+}
+
+refreshTechTicketNotifications();
+setInterval(refreshTechTicketNotifications, 30000);
 </script>
 
 <%- include('partials/bottom_nav') %>

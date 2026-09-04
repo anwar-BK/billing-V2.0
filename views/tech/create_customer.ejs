@@ -180,6 +180,20 @@
       <textarea name="notes" class="form-control rounded-4" rows="2" placeholder="opsional"></textarea>
     </div>
 
+    <div class="mt-4 p-3 rounded-3" style="background:#111827; border:1px solid #334155;">
+      <div class="fw-bold mb-2"><i class="bi bi-box-seam text-warning me-2"></i>Material Pemasangan</div>
+      <div class="text-secondary small mb-2">Barang yang dipakai akan mengurangi stok dashboard admin.</div>
+      <div id="installStockOutRows">
+        <div class="row g-2 mb-2 stock-row">
+          <div class="col-6"><select name="stock_out_item_id[]" class="form-select"><option value="">-- Barang --</option><% (inventoryItems || []).forEach(item => { %><option value="<%= item.id %>"><%= item.name %> (sisa <%= item.stock_available || 0 %>)</option><% }) %></select></div>
+          <div class="col-3"><input name="stock_out_quantity[]" type="number" min="1" class="form-control" placeholder="Qty"></div>
+          <div class="col-3"><input name="stock_out_serial_number[]" class="form-control" placeholder="Serial (opsional)"></div>
+        </div>
+      </div>
+      <button type="button" class="btn btn-outline-light btn-sm" onclick="addInstallStockRow()"><i class="bi bi-plus me-1"></i>Tambah Barang</button>
+      <input name="stock_note" class="form-control mt-2" placeholder="Catatan material (opsional)">
+    </div>
+
     <button type="submit" class="btn btn-primary btn-action mt-3">
       <i class="bi bi-save2 me-2"></i>Simpan Pelanggan
     </button>
@@ -187,6 +201,14 @@
 </div>
 
 <script>
+  const inventoryOptions = `<option value="">-- Barang --</option><% (inventoryItems || []).forEach(item => { %><option value="<%= item.id %>"><%= item.name %> (sisa <%= item.stock_available || 0 %>)</option><% }) %>`;
+  function addInstallStockRow() {
+    const row = document.querySelector('#installStockOutRows .stock-row').cloneNode(true);
+    row.querySelectorAll('input').forEach(input => { input.value = ''; });
+    row.querySelector('select').innerHTML = inventoryOptions;
+    document.getElementById('installStockOutRows').appendChild(row);
+  }
+
   function getLocation() {
     if (!navigator.geolocation) return alert('Geolocation tidak didukung di perangkat ini.');
     navigator.geolocation.getCurrentPosition((pos) => {

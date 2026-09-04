@@ -9,6 +9,33 @@ services:
     volumes:
       - mongo_data:/data/db
 
+  # Import parameter GenieACS dari folder db/ hanya sekali pada instalasi baru.
+  genieacs-seed:
+    image: mongo:6.0
+    container_name: genieacs-seed
+    restart: "no"
+    volumes:
+      - ./db:/backup:ro
+      - ./database:/state
+    depends_on:
+      - mongodb
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        until mongosh --host mongodb --quiet --eval "db.adminCommand('ping').ok" | grep -q 1; do sleep 2; done;
+        if [ ! -f /state/.genieacs-seeded ]; then
+          COLLECTIONS=$$(mongosh --host mongodb --quiet --eval "db.getSiblingDB('genieacs').getCollectionNames().length");
+          if [ "$$COLLECTIONS" = "0" ]; then
+            mongorestore --host mongodb --db genieacs /backup;
+            echo 'GenieACS parameters imported';
+          else
+            echo 'Existing GenieACS data detected; import skipped';
+          fi;
+          touch /state/.genieacs-seeded;
+        else
+          echo 'GenieACS parameters already imported';
+        fi
+
   # 2. DATABASE PENDUKUNG (Redis untuk GenieACS cache)
   redis:
     image: redis:7.0-alpine
@@ -35,8 +62,12 @@ services:
       - "7567:7567" # Port UI GenieACS
       - "3000:3000" # Port Web GenieACS
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_started
+      genieacs-seed:
+        condition: service_completed_successfully
 
   # 4. APLIKASI BILLING BK-NET
   billing-app:
@@ -64,8 +95,10 @@ services:
       - ./auth_info_baileys:/app/auth_info_baileys
       - ./logs:/app/logs
     depends_on:
-      - mongodb
-      - genieacs
+      mongodb:
+        condition: service_started
+      genieacs:
+        condition: service_started
 
 volumes:
   mongo_data:

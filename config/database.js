@@ -155,6 +155,16 @@ runSchema(`
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 
+  CREATE TABLE IF NOT EXISTS admin_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT (NOW_LOCAL()),
+    updated_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
   CREATE TABLE IF NOT EXISTS cashiers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -206,7 +216,9 @@ runSchema(`
 
   CREATE TABLE IF NOT EXISTS tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+    manual_customer_name TEXT DEFAULT '',
+    manual_customer_phone TEXT DEFAULT '',
     subject TEXT NOT NULL,
     message TEXT NOT NULL,
     status TEXT DEFAULT 'open', -- open, in_progress, resolved
@@ -558,6 +570,49 @@ runSchema(`
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
 `, 'core-tables');
+
+// Tiket manual admin tidak selalu memiliki pelanggan terdaftar.
+// Migrasikan database lama agar customer_id boleh NULL dan simpan identitas manual pada tiket.
+try {
+  const ticketColumns = db.prepare('PRAGMA table_info(tickets)').all();
+  const customerIdColumn = ticketColumns.find(column => column.name === 'customer_id');
+  const hasManualName = ticketColumns.some(column => column.name === 'manual_customer_name');
+  if (customerIdColumn && customerIdColumn.notnull === 1) {
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      ALTER TABLE tickets RENAME TO tickets_legacy;
+      CREATE TABLE tickets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+        manual_customer_name TEXT DEFAULT '',
+        manual_customer_phone TEXT DEFAULT '',
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT DEFAULT 'open',
+        technician_id INTEGER REFERENCES technicians(id) ON DELETE SET NULL,
+        technician_notes TEXT DEFAULT '',
+        photos TEXT DEFAULT '',
+        photo_metadata TEXT DEFAULT '',
+        customer_photos TEXT DEFAULT '',
+        customer_photo_metadata TEXT DEFAULT '',
+        created_at DATETIME DEFAULT (NOW_LOCAL()),
+        updated_at DATETIME DEFAULT (NOW_LOCAL())
+      );
+      INSERT INTO tickets (id, customer_id, subject, message, status, technician_id, technician_notes, photos, photo_metadata, customer_photos, customer_photo_metadata, created_at, updated_at)
+      SELECT id, customer_id, subject, message, status, technician_id, technician_notes, photos, photo_metadata, customer_photos, customer_photo_metadata, created_at, updated_at
+      FROM tickets_legacy;
+      DROP TABLE tickets_legacy;
+    `);
+    db.pragma('foreign_keys = ON');
+  } else if (!hasManualName) {
+    db.exec(`
+      ALTER TABLE tickets ADD COLUMN manual_customer_name TEXT DEFAULT '';
+      ALTER TABLE tickets ADD COLUMN manual_customer_phone TEXT DEFAULT '';
+    `);
+  }
+} catch (e) {
+  console.error('[DB] Gagal migrasi tiket manual:', e.message);
+}
 
 // Inisialisasi tabel voucher_packages (Paket Voucher Hotspot Real-time)
 db.exec(`

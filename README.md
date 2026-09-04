@@ -146,6 +146,112 @@ Sistem manajemen ISP yang mengintegrasikan **penagihan**, **GenieACS**, **OLT (S
 
 Repository ini berisi sistem *billing* RT/RW Net yang terintegrasi langsung dengan **GenieACS** untuk manajemen perangkat ONT/Router secara otomatis menggunakan protokol TR-069, dirancang khusus untuk operasional ISP **BK-NET**.
 
+## Panduan Cepat Ubuntu dari Nol
+
+Bagian ini adalah urutan instalasi yang direkomendasikan untuk server Ubuntu baru.
+
+### 1. Siapkan Ubuntu dan Docker
+
+Untuk Linux Mint 22.x/Ubuntu 24.04, gunakan paket dari repository Ubuntu. Jangan memakai repository Docker Debian `trixie` pada sistem berbasis Ubuntu/Mint.
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git curl ufw docker.io docker-compose-v2
+sudo systemctl enable --now docker
+docker --version
+docker compose version
+```
+
+Jika sebelumnya pernah menjalankan installer Docker Debian dan muncul error `held broken packages`, hapus source yang salah lalu pasang paket Ubuntu:
+
+```bash
+sudo rm -f /etc/apt/sources.list.d/docker.list
+sudo apt update
+sudo apt --fix-broken install -y
+sudo apt install -y docker.io docker-compose-v2
+sudo systemctl enable --now docker
+```
+
+### 2. Clone repository resmi
+
+Gunakan repository ini agar server terhubung ke sumber update yang benar:
+
+```bash
+sudo mkdir -p /opt/billing-V2.0
+sudo chown -R "$USER":"$USER" /opt/billing-V2.0
+git clone https://github.com/anwar-BK/billing-V2.0.git /opt/billing-V2.0
+cd /opt/billing-V2.0
+git remote set-url origin https://github.com/anwar-BK/billing-V2.0.git
+```
+
+Jangan menyalin source aplikasi tanpa folder `.git`, karena fitur pemeriksaan commit dan update GitHub membutuhkan repository Git.
+
+### 3. Siapkan konfigurasi pribadi
+
+```bash
+cp settings.example.json settings.json
+nano settings.json
+mkdir -p database logs auth_info_baileys
+test -f settings.json
+test ! -d settings.json
+```
+
+Isi pengaturan koneksi, perusahaan, WhatsApp, MikroTik, pembayaran, dan GenieACS sesuai server. Jangan commit `settings.json`, `.env`, database, atau sesi WhatsApp ke GitHub.
+
+### 4. Jalankan instalasi pertama
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f genieacs-seed
+```
+
+Pada startup pertama, `genieacs-seed` menunggu MongoDB siap lalu mengimpor parameter dari folder `db/` ke database GenieACS. Data `presets`, `provisions`, `virtualParameters`, dan koleksi terkait akan ikut terpasang. Import hanya dilakukan satu kali dan ditandai oleh `database/.genieacs-seeded`.
+
+Jika database GenieACS sudah berisi data, proses seed melewati import agar tidak menimpa konfigurasi yang sedang digunakan. Volume `mongo_data` menyimpan data MongoDB setelah instalasi selesai.
+
+### 5. Akses dan pemeriksaan awal
+
+```bash
+docker compose ps
+docker compose logs --tail=100 billing-app
+docker compose logs --tail=100 genieacs
+```
+
+Portal billing tersedia di port `3001`, UI GenieACS di port `3000`, NBI GenieACS di port `7557`, dan CWMP di port `7547`. Pastikan port yang diperlukan dibuka pada firewall/server.
+
+## Notifikasi dan Update GitHub
+
+Dashboard admin memeriksa commit branch GitHub setiap 60 detik. Jika repository `anwar-BK/billing-V2.0` memiliki commit baru, dashboard menampilkan notifikasi **Update aplikasi tersedia**. Halaman **Admin → Update GitHub** menampilkan commit server dan commit GitHub.
+
+### Update melalui halaman admin
+
+1. Login sebagai admin utama.
+2. Buka **Admin → Update GitHub**.
+3. Periksa commit lokal dan commit GitHub.
+4. Klik **Update Sekarang**.
+
+Proses update menyimpan file runtime seperti `settings.json`, `.env`, `database`, `public/uploads`, sesi WhatsApp, dan folder data sebelum source diperbarui. Setelah source terbaru diterapkan, dependency di-install ulang dan aplikasi dapat direstart.
+
+### Update melalui terminal Ubuntu
+
+```bash
+cd /opt/billing-V2.0
+sudo bash update.sh
+```
+
+`update.sh` akan membuat backup `settings.json`, memastikan remote `origin` mengarah ke repository resmi, mengambil commit terbaru, lalu menjalankan `docker compose up -d --build`. Parameter GenieACS tidak diimpor ulang ketika `database/.genieacs-seeded` sudah ada.
+
+Jika server lama bukan clone Git, siapkan remote sebelum memakai fitur update:
+
+```bash
+cd /opt/billing-V2.0
+git remote set-url origin https://github.com/anwar-BK/billing-V2.0.git
+git fetch origin
+```
+
+Sebelum update produksi, buat backup tambahan dan pastikan tidak ada perubahan source penting yang belum disimpan. Data operasional tetap berada di volume/folder persisten, tetapi backup eksternal tetap dianjurkan.
+
 ---
 
 ## 🚀 Panduan Instalasi Lengkap dari Nol (Fresh Server)
@@ -167,19 +273,20 @@ apt install -y curl git ufw
 
 ### Langkah 2: Instalasi Docker & Docker Compose
 
-Seluruh layanan (GenieACS, MongoDB, Redis, dan Aplikasi Billing) dijalankan di dalam kontainer Docker agar lebih bersih dan mudah dikelola.
+Seluruh layanan dijalankan di dalam kontainer Docker. Pada Linux Mint 22.x/Ubuntu 24.04, gunakan paket Ubuntu berikut. Jangan menambahkan repository Debian Trixie.
 
-1. **Instal Docker resmi:**
-   ```bash
-   curl -fsSL https://get.docker.com -o get-docker.sh
-   sh get-docker.sh
-   ```
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2
+sudo systemctl enable --now docker
+```
 
-2. **Verifikasi instalasi Docker:**
-   ```bash
-   docker --version
-   docker compose version
-   ```
+Verifikasi instalasi Docker:
+
+```bash
+docker --version
+docker compose version
+```
 
 ---
 
@@ -242,6 +349,8 @@ Jalankan perintah berikut di dalam folder project untuk mengunduh image yang dib
 docker compose up -d
 ```
 
+Pada instalasi pertama, service `genieacs-seed` otomatis mengimpor backup parameter GenieACS dari folder `db/` ke MongoDB (`presets`, `provisions`, `virtualParameters`, dan koleksi terkait). Import hanya dilakukan sekali dan ditandai dengan file `database/.genieacs-seeded`; restart atau update berikutnya tidak menghapus parameter yang sudah berjalan.
+
 Perintah `docker compose up -d` akan menjalankan seluruh service di background. Pada `docker-compose.yml`, service `mongodb`, `genieacs`, dan `billing-app` sudah memakai `restart: always`, sehingga container akan otomatis hidup kembali setelah server reboot atau proses container berhenti.
 
 Aktifkan Docker agar ikut berjalan saat boot Ubuntu:
@@ -257,6 +366,14 @@ Jika ada perubahan source atau Dockerfile, rebuild dan jalankan kembali:
 ```bash
 docker compose up -d --build
 ```
+
+Untuk mengambil update terbaru dari GitHub pada server yang sudah terpasang:
+
+```bash
+sudo bash update.sh
+```
+
+Script tersebut membuat backup `settings.json`, mengambil commit terbaru dari branch Git aktif dengan `git pull --ff-only`, lalu menjalankan `docker compose up -d --build`. Data MongoDB, SQLite, log, sesi WhatsApp, dan parameter GenieACS tetap berada di volume/folder persisten.
 
 ### Instalasi Node.js langsung dengan systemd (tanpa Docker)
 

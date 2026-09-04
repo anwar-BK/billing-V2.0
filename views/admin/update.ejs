@@ -60,6 +60,10 @@
           </form>
         </div>
 
+        <div style="margin-top:12px;color:var(--muted);font-size:12px">
+          Commit server: <strong><%= info?.localCommit || '-' %></strong> · Commit GitHub: <strong><%= info?.remoteCommit || '-' %></strong>
+        </div>
+
         <div style="margin-top:12px;color:var(--muted);font-size:12px;line-height:1.5">
           <%= t('admin.update.keep_files', 'File yang tidak ditimpa saat update: settings.json dan folder database. Setelah update selesai, restart aplikasi agar versi baru aktif.') %>
         </div>
