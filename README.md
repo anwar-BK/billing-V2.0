@@ -4,8 +4,8 @@
 
 Sistem manajemen ISP yang mengintegrasikan **penagihan**, **GenieACS**, **OLT (SNMP)**, **MikroTik** (PPPoE/hotspot/voucher), **peta jaringan (GIS)**, **inventaris**, **WhatsApp/Telegram**, dan **multi-portal** (admin, teknisi, pelanggan, agen) dalam satu platform.
 
-[![GitHub license](https://img.shields.io/github/license/alijayanet/billing-rtrw)](https://github.com/alijayanet/billing-rtrw/blob/main/LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/alijayanet/billing-rtrw)](https://github.com/alijayanet/billing-rtrw/stargazers)
+[![GitHub license](https://img.shields.io/github/license/anwar-BK/billing-V2.0)](https://github.com/anwar-BK/billing-V2.0/blob/master/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/anwar-BK/billing-V2.0)](https://github.com/anwar-BK/billing-V2.0/stargazers)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
 
 ---
@@ -33,6 +33,7 @@ Sistem manajemen ISP yang mengintegrasikan **penagihan**, **GenieACS**, **OLT (S
 - Dukungan **RouterOS 7** (menggunakan client API yang kompatibel untuk menghindari error balasan `!empty` pada library lama).
 - **PPPoE**: profil, user/secret, sesi aktif, **monitor trafik**; **jam kalong** (ganti profil malam/hari lewat cron); **FUP** (ganti profil saat pemakaian bulanan melewati batas paket).
 - **Pencatatan pemakaian (usage)**: sinkron periodik dari counter sesi PPPoE ke database (dapat dimatikan lewat pengaturan `usage_tracking_enabled`).
+- **Aktif sementara pelanggan**: buka isolir sampai tanggal yang ditentukan admin, termasuk pengingat WhatsApp sebelum masa aktif berakhir.
 - **Hotspot**: profil user, user hotspot, sesi aktif hotspot.
 - **Voucher hotspot**: template voucher, **batch** generate, sinkron ke MikroTik, cetak batch, export **CSV**, hapus batch.
 - **Backup konfigurasi** MikroTik dari panel.
@@ -113,7 +114,8 @@ Sistem manajemen ISP yang mengintegrasikan **penagihan**, **GenieACS**, **OLT (S
 ### Otomatisasi terjadwal (cron)
 - Tanggal **1 jam 00:01**: generate **tagihan bulanan**.
 - Setiap hari **jam 02:00**: **isolir otomatis** pelanggan aktif yang lewat jatuh tempo/isolir (sesuai hari & flag per pelanggan).
-- **Jam 09:00**: pengingat tagihan via **WhatsApp** (H-1 dari hari isolir, jika fitur diaktifkan).
+- **Jam 09:00**: pengingat tagihan via **WhatsApp** (jumlah hari sebelum isolir dapat diatur dari panel).
+- **Jam 09:00**: pengingat pelanggan **aktif sementara** sebelum tanggal akses berakhir (jumlah hari dapat diatur dari panel).
 - **00:00 & 06:00**: **jam kalong** — ganti profil PPPoE malam/siang untuk paket yang mengaktifkannya.
 - Setiap **10 menit**: **sinkron pemakaian data** dari sesi **PPPoE aktif** di MikroTik (jika tracking diaktifkan).
 - Setiap **jam**: pengecekan **FUP** dan penurunan profil bila kuota habis.
@@ -186,7 +188,7 @@ Seluruh layanan (GenieACS, MongoDB, Redis, dan Aplikasi Billing) dijalankan di d
 Ambil seluruh file konfigurasi dan basis kode sistem dari repository Anda:
 
 ```bash
-git clone https://github.com/anwar-BK/billing-genieacs.git /root/billing-rtrw
+git clone https://github.com/anwar-BK/billing-V2.0.git /root/billing-rtrw
 cd /root/billing-rtrw
 ```
 
@@ -195,7 +197,19 @@ cd /root/billing-rtrw
 ### Langkah 4: Konfigurasi Environment & Docker Compose
 
 1. Periksa file `docker-compose.yml` di dalam direktori project untuk memastikan port layanan (seperti port GenieACS `7547`, `7557`, `7567`, UI GenieACS `3000`, dan port *billing*) sudah sesuai dengan kebutuhan server Anda.
-2. Sesuaikan file pengaturan environment (seperti `.env` atau konfigurasi database jika ada).
+2. File rahasia seperti `settings.json`, `.env`, database SQLite, dan sesi WhatsApp tidak disimpan di GitHub. Salin file konfigurasi pribadi Anda ke folder project:
+
+  ```bash
+  cp /root/backup-billing/settings.json ./settings.json
+  cp /root/backup-billing/.env ./.env
+  ```
+
+  Jika ini instalasi baru, buat `settings.json` melalui konfigurasi aplikasi atau gunakan file konfigurasi pribadi yang sudah disiapkan. Jangan memasukkan password, API key, atau database produksi ke repository public.
+3. Pastikan folder runtime tersedia:
+
+  ```bash
+  mkdir -p database logs auth_info_baileys
+  ```
 
 ---
 
@@ -206,6 +220,69 @@ Jalankan perintah berikut di dalam folder project untuk mengunduh image yang dib
 ```bash
 docker compose up -d
 ```
+
+Perintah `docker compose up -d` akan menjalankan seluruh service di background. Pada `docker-compose.yml`, service `mongodb`, `genieacs`, dan `billing-app` sudah memakai `restart: always`, sehingga container akan otomatis hidup kembali setelah server reboot atau proses container berhenti.
+
+Aktifkan Docker agar ikut berjalan saat boot Ubuntu:
+
+```bash
+sudo systemctl enable --now docker
+docker compose ps
+docker compose logs -f billing-app
+```
+
+Jika ada perubahan source atau Dockerfile, rebuild dan jalankan kembali:
+
+```bash
+docker compose up -d --build
+```
+
+### Instalasi Node.js langsung dengan systemd (tanpa Docker)
+
+Gunakan cara ini hanya jika MongoDB, Redis, dan GenieACS sudah tersedia sebagai service terpisah. Instal dependency dan uji aplikasi terlebih dahulu:
+
+```bash
+npm install --production
+node app-customer.js
+```
+
+Buat service systemd:
+
+```bash
+sudo nano /etc/systemd/system/billing-v2.service
+```
+
+Isi dengan konfigurasi berikut, sesuaikan `User` dan `WorkingDirectory`:
+
+```ini
+[Unit]
+Description=Billing V2.0 Node.js Application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/billing-rtrw
+ExecStart=/usr/bin/node /root/billing-rtrw/app-customer.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Aktifkan service dan cek log:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now billing-v2
+sudo systemctl status billing-v2
+journalctl -u billing-v2 -f
+```
+
+`Restart=always` membuat aplikasi hidup kembali saat crash, sedangkan `systemctl enable` membuatnya otomatis berjalan setelah server reboot.
 
 Verifikasi bahwa semua kontainer berjalan normal dengan perintah:
 ```bash
