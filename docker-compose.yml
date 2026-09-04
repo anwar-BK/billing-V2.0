@@ -1,0 +1,66 @@
+services:
+  # 1. DATABASE (MongoDB untuk Billing & GenieACS)
+  mongodb:
+    image: mongo:6.0
+    container_name: billing-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # 2. DATABASE PENDUKUNG (Redis untuk GenieACS cache)
+  redis:
+    image: redis:7.0-alpine
+    container_name: genieacs-redis
+    restart: always
+
+  # 3. GENIEACS ENGINE (Build Mandiri - Tanpa Takut Pull Denied)
+  genieacs:
+    image: lokal-genieacs:1.2
+    build:
+      context: .
+      dockerfile: Dockerfile.genieacs
+    container_name: genieacs-engine
+    restart: always
+    environment:
+      - GENIEACS_MONGODB_CONNECTION_URL=mongodb://mongodb:27017/genieacs
+      - GENIEACS_REDIS_CONNECTION_URL=redis://redis:6379
+      - GENIEACS_CWMP_ACCESS_LOG_FILE=/var/log/genieacs/genieacs-cwmp-access.log
+      - GENIEACS_USER_INTERFACE_ACCESS_LOG_FILE=/var/log/genieacs/genieacs-ui-access.log
+      - GENIEACS_UI_JWT_SECRET=rahasia
+    ports:
+      - "7547:7547" # Port CWMP untuk ONT
+      - "7557:7557" # Port NBI API
+      - "7567:7567" # Port UI GenieACS
+      - "3000:3000" # Port Web GenieACS
+    depends_on:
+      - mongodb
+      - redis
+
+  # 4. APLIKASI BILLING BK-NET
+  billing-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: billing-bknet
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongodb:27017/billing_db
+      - GENIEACS_URL=http://genieacs:7557
+    volumes:
+      # Mount folder (bukan file). Mount file yang belum ada membuat Docker
+      # membuat FOLDER bernama billing.db — SQLite lalu crash saat install pertama.
+      - ./database:/app/database
+      - ./settings.json:/app/settings.json
+      - ./auth_info_baileys:/app/auth_info_baileys
+      - ./logs:/app/logs
+    depends_on:
+      - mongodb
+      - genieacs
+
+volumes:
+  mongo_data:

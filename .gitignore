@@ -1,0 +1,17 @@
+node_modules/
+.env
+settings.json
+database/*.db
+database/*.db-shm
+database/*.db-wal
+database/*.backup-*
+database.sqlite
+logs/*
+!logs/.gitkeep
+auth_info_baileys/
+data/
+*.log
+*.pid
+temp_repo/
+public/uploads/*
+!public/uploads/.gitkeep
