@@ -219,6 +219,7 @@ runSchema(`
     customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
     manual_customer_name TEXT DEFAULT '',
     manual_customer_phone TEXT DEFAULT '',
+    manual_customer_address TEXT DEFAULT '',
     subject TEXT NOT NULL,
     message TEXT NOT NULL,
     status TEXT DEFAULT 'open', -- open, in_progress, resolved
@@ -577,6 +578,7 @@ try {
   const ticketColumns = db.prepare('PRAGMA table_info(tickets)').all();
   const customerIdColumn = ticketColumns.find(column => column.name === 'customer_id');
   const hasManualName = ticketColumns.some(column => column.name === 'manual_customer_name');
+  const hasManualAddress = ticketColumns.some(column => column.name === 'manual_customer_address');
   if (customerIdColumn && customerIdColumn.notnull === 1) {
     db.pragma('foreign_keys = OFF');
     db.exec(`
@@ -586,6 +588,7 @@ try {
         customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
         manual_customer_name TEXT DEFAULT '',
         manual_customer_phone TEXT DEFAULT '',
+        manual_customer_address TEXT DEFAULT '',
         subject TEXT NOT NULL,
         message TEXT NOT NULL,
         status TEXT DEFAULT 'open',
@@ -608,7 +611,10 @@ try {
     db.exec(`
       ALTER TABLE tickets ADD COLUMN manual_customer_name TEXT DEFAULT '';
       ALTER TABLE tickets ADD COLUMN manual_customer_phone TEXT DEFAULT '';
+      ALTER TABLE tickets ADD COLUMN manual_customer_address TEXT DEFAULT '';
     `);
+  } else if (!hasManualAddress) {
+    db.exec(`ALTER TABLE tickets ADD COLUMN manual_customer_address TEXT DEFAULT '';`);
   }
 } catch (e) {
   console.error('[DB] Gagal migrasi tiket manual:', e.message);

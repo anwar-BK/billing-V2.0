@@ -134,6 +134,7 @@
         <div id="manualCustomerFields" style="display:none; padding:12px; margin-bottom:12px; border:1px solid var(--border); border-radius:8px;">
           <div class="fg"><label class="fl">Nama Pelanggan Manual</label><input class="fc" name="manual_customer_name" id="manualCustomerName" placeholder="Nama pelanggan / calon pelanggan"></div>
           <div class="fg"><label class="fl">Nomor Telepon</label><input class="fc" name="manual_customer_phone" placeholder="Opsional"></div>
+          <div class="fg"><label class="fl">Alamat</label><textarea class="fc" name="manual_customer_address" rows="2" placeholder="Alamat pelanggan manual (opsional)"></textarea></div>
         </div>
         <div class="fg"><label class="fl">Teknisi (Opsional)</label><select class="fs" name="technician_id"><option value="">Masuk ke Pool Teknisi</option><% (ticketTechnicians || []).forEach(tech => { %><option value="<%= tech.id %>"><%= tech.name %> (<%= tech.area || 'Semua area' %>)</option><% }) %></select></div>
         <div class="fg"><label class="fl">Subjek / Jenis Pekerjaan</label><input class="fc" name="subject" required placeholder="Contoh: Pemasangan baru atau perbaikan ONU"></div>
