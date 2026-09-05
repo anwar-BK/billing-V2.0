@@ -19,10 +19,62 @@ const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
 const GITHUB_REPO_URL = 'https://github.com/anwar-BK/billing-V2.0.git';
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 const qrisUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
+
+async function buildExcelBufferFromRows(rows, sheetName) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName || 'Sheet1');
+  const safeRows = Array.isArray(rows) ? rows : [];
+
+  if (safeRows.length > 0) {
+    const headers = Object.keys(safeRows[0]);
+    worksheet.columns = headers.map((header) => ({ header, key: header }));
+    safeRows.forEach((row) => worksheet.addRow(row || {}));
+  }
+
+  const out = await workbook.xlsx.writeBuffer();
+  return Buffer.from(out);
+}
+
+async function parseExcelRowsFromBuffer(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return [];
+
+  const headerValues = worksheet.getRow(1).values.slice(1);
+  const headers = headerValues.map((v) => String(v || '').trim());
+  const rows = [];
+
+  for (let i = 2; i <= worksheet.rowCount; i++) {
+    const row = worksheet.getRow(i);
+    const out = {};
+    let hasData = false;
+
+    headers.forEach((header, index) => {
+      if (!header) return;
+      let value = row.getCell(index + 1).value;
+      if (value && typeof value === 'object') {
+        if (typeof value.text === 'string') value = value.text;
+        else if (value.result !== undefined && value.result !== null) value = value.result;
+        else if (Array.isArray(value.richText)) value = value.richText.map((part) => part?.text || '').join('');
+        else if (value instanceof Date) value = value.toISOString();
+        else value = String(value);
+      }
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        out[header] = value;
+        hasData = true;
+      }
+    });
+
+    if (hasData) rows.push(out);
+  }
+
+  return rows;
+}
 
 // Promo slides upload storage
 const promoSlidesStorage = multer.diskStorage({
@@ -2004,7 +2056,7 @@ router.post('/customers/:id/delete', requireAdminSession, async (req, res) => {
 });
 
 // ─── EXPORT/IMPORT CUSTOMERS ──────────────────────────────────────
-router.get('/customers/export', requireAdminSession, (req, res) => {
+router.get('/customers/export', requireAdminSession, async (req, res) => {
   try {
     const customers = customerSvc.getAllCustomers();
     const data = customers.map(c => ({
@@ -2031,11 +2083,7 @@ router.get('/customers/export', requireAdminSession, (req, res) => {
       'Catatan': c.notes
     }));
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Pelanggan');
-    
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buf = await buildExcelBufferFromRows(data, 'Pelanggan');
     res.setHeader('Content-Disposition', 'attachment; filename=daftar_pelanggan.xlsx');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buf);
@@ -2048,9 +2096,7 @@ router.get('/customers/export', requireAdminSession, (req, res) => {
 router.post('/customers/import', requireAdminSession, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) throw new Error('File tidak ditemukan');
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws);
+    const rows = await parseExcelRowsFromBuffer(req.file.buffer);
     logger.info(`[Import] Found ${rows.length} rows in Excel file.`);
     
     const packages = customerSvc.getAllPackages();
@@ -6031,7 +6077,7 @@ router.post('/attendance/:id/delete', requireAdminSession, (req, res) => {
 });
 
 // Export attendance to Excel
-router.get('/attendance/export', requireAdminSession, (req, res) => {
+router.get('/attendance/export', requireAdminSession, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     if (!startDate || !endDate) {
@@ -6058,11 +6104,7 @@ router.get('/attendance/export', requireAdminSession, (req, res) => {
       'Status': a.status
     }));
     
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Absensi');
-    
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buffer = await buildExcelBufferFromRows(data, 'Absensi');
     
     res.setHeader('Content-Disposition', `attachment; filename=absensi_${startDate}_${endDate}.xlsx`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
