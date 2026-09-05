@@ -2972,13 +2972,14 @@ router.post('/tickets/create', requireAdminSession, express.urlencoded({ extende
     const customerId = isManualCustomer ? null : Number(req.body.customer_id);
     const manualCustomerName = String(req.body.manual_customer_name || '').trim();
     const manualCustomerPhone = String(req.body.manual_customer_phone || '').trim();
+    const manualCustomerAddress = String(req.body.manual_customer_address || '').trim();
     const subject = String(req.body.subject || '').trim();
     const message = String(req.body.message || '').trim();
     const technicianId = req.body.technician_id ? Number(req.body.technician_id) : null;
     if (isManualCustomer ? !manualCustomerName : !customerId) throw new Error('Pilih pelanggan atau isi nama pelanggan manual');
     if (!subject || !message) throw new Error('Subjek dan detail tiket wajib diisi');
     if (technicianId && !techSvcForTickets.getTechById(technicianId)) throw new Error('Teknisi tidak valid');
-    ticketSvc.createTicket(customerId, subject, message, { technicianId, manualCustomerName, manualCustomerPhone });
+    ticketSvc.createTicket(customerId, subject, message, { technicianId, manualCustomerName, manualCustomerPhone, manualCustomerAddress });
     req.session._msg = { type: 'success', text: technicianId ? 'Tiket dibuat dan ditugaskan ke teknisi.' : 'Tiket berhasil dibuat dan masuk ke pool teknisi.' };
   } catch (e) {
     req.session._msg = { type: 'error', text: 'Gagal membuat tiket: ' + e.message };

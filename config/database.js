@@ -234,6 +234,7 @@ runSchema(`
     customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
     manual_customer_name TEXT DEFAULT '',
     manual_customer_phone TEXT DEFAULT '',
+    manual_customer_address TEXT DEFAULT '',
     subject TEXT NOT NULL,
     message TEXT NOT NULL,
     status TEXT DEFAULT 'open', -- open, in_progress, resolved
@@ -601,6 +602,7 @@ try {
         customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
         manual_customer_name TEXT DEFAULT '',
         manual_customer_phone TEXT DEFAULT '',
+        manual_customer_address TEXT DEFAULT '',
         subject TEXT NOT NULL,
         message TEXT NOT NULL,
         status TEXT DEFAULT 'open',
@@ -784,6 +786,7 @@ try { db.exec("ALTER TABLE tickets ADD COLUMN photos TEXT DEFAULT ''"); } catch 
 try { db.exec("ALTER TABLE tickets ADD COLUMN photo_metadata TEXT DEFAULT ''"); } catch (e) {}
 try { db.exec("ALTER TABLE tickets ADD COLUMN customer_photos TEXT DEFAULT ''"); } catch (e) {}
 try { db.exec("ALTER TABLE tickets ADD COLUMN customer_photo_metadata TEXT DEFAULT ''"); } catch (e) {}
+try { db.exec("ALTER TABLE tickets ADD COLUMN manual_customer_address TEXT DEFAULT ''"); } catch (e) {}
 
 // Kolom untuk Payment Gateway di tabel invoices
 try { db.exec("ALTER TABLE invoices ADD COLUMN payment_gateway TEXT"); } catch (e) {}

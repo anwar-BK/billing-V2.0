@@ -24,7 +24,7 @@ function getAssignedTickets(techId) {
   return db.prepare(`
         SELECT t.*, COALESCE(NULLIF(t.manual_customer_name, ''), c.name) as customer_name,
           COALESCE(NULLIF(t.manual_customer_phone, ''), c.phone) as customer_phone,
-          c.address as customer_address
+          COALESCE(NULLIF(t.manual_customer_address, ''), c.address) as customer_address
     FROM tickets t 
         LEFT JOIN customers c ON t.customer_id = c.id 
     WHERE t.technician_id = ? AND t.status != 'resolved'
@@ -36,7 +36,7 @@ function getOpenTickets() {
   return db.prepare(`
         SELECT t.*, COALESCE(NULLIF(t.manual_customer_name, ''), c.name) as customer_name,
           COALESCE(NULLIF(t.manual_customer_phone, ''), c.phone) as customer_phone,
-          c.address as customer_address
+          COALESCE(NULLIF(t.manual_customer_address, ''), c.address) as customer_address
     FROM tickets t 
         LEFT JOIN customers c ON t.customer_id = c.id 
     WHERE t.status = 'open'
@@ -48,7 +48,7 @@ function getResolvedTickets(techId) {
   return db.prepare(`
         SELECT t.*, COALESCE(NULLIF(t.manual_customer_name, ''), c.name) as customer_name,
           COALESCE(NULLIF(t.manual_customer_phone, ''), c.phone) as customer_phone,
-          c.address as customer_address
+          COALESCE(NULLIF(t.manual_customer_address, ''), c.address) as customer_address
     FROM tickets t 
         LEFT JOIN customers c ON t.customer_id = c.id 
     WHERE t.technician_id = ? AND t.status = 'resolved'
