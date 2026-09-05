@@ -90,6 +90,19 @@ function startCronJobs() {
     let isolatedCount = 0;
 
     for (const c of customers) {
+      if (c.billing_type === 'prepaid') {
+        const prepaidUntil = String(c.prepaid_active_until || '').trim();
+        if (prepaidUntil && prepaidUntil >= todayIso) continue;
+        if (c.status === 'active' && (!prepaidUntil || prepaidUntil < todayIso)) {
+          try {
+            await customerSvc.suspendCustomer(c.id, 'prepaid');
+            isolatedCount++;
+          } catch (err) {
+            logger.error(`[CRON] Gagal isolir prabayar ${c.name}: ${err.message}`);
+          }
+        }
+        continue;
+      }
       // Cek apakah isolir otomatis aktif untuk user ini dan hari ini adalah tanggal isolirnya
       const customerIsolirDay = c.isolate_day || 10;
       const isAutoIsolateEnabled = c.auto_isolate !== 0; // default aktif jika null/1
@@ -348,6 +361,29 @@ function startCronJobs() {
     }
 
     logger.info(`[CRON] Pengingat tagihan otomatis selesai: target=${targetCount}, terkirim=${sent}, gagal=${failed}`);
+  });
+
+  // Pengingat masa aktif prabayar, terpisah dari pengingat invoice pascabayar.
+  cron.schedule('5 9 * * *', async () => {
+    if (!getSetting('whatsapp_enabled', false)) return;
+    try {
+      const { sendWA, whatsappStatus } = await import('./whatsappBot.mjs');
+      if (!whatsappStatus || whatsappStatus.connection !== 'open') return;
+      const today = getCurrentDateInTimezone();
+      const daysBefore = Math.max(0, Math.min(30, Number(getSetting('prepaid_reminder_days_before_expiry', 3)) || 0));
+      const target = new Date(today.getTime());
+      target.setDate(target.getDate() + daysBefore);
+      const targetIso = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
+      const customers = customerSvc.getAllCustomers().filter(c => c.billing_type === 'prepaid' && c.status === 'active' && c.prepaid_active_until === targetIso && c.phone);
+      const template = String(db.getAppSetting('whatsapp_prepaid_reminder_message', `Yth. Pelanggan {{nama}},\n\nMasa aktif internet prabayar Anda akan berakhir pada {{tanggal_aktif}}. Silakan melakukan pembayaran agar layanan tetap aktif dan tidak terisolir.\n\nTerima kasih.`));
+      for (const c of customers) {
+        const message = template.replace(/{{nama}}/gi, c.name || 'Pelanggan').replace(/{{tanggal_aktif}}/gi, c.prepaid_active_until || '-');
+        await sendWA(c.phone, message);
+      }
+      logger.info(`[CRON] Pengingat prabayar terkirim: ${customers.length}`);
+    } catch (e) {
+      logger.error(`[CRON] Gagal pengingat prabayar: ${e.message}`);
+    }
   });
 
   // 4. Jam Kalong (Night Speed) Start - Jam 00:00

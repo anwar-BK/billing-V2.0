@@ -96,7 +96,7 @@ function computeInvoiceAmountAndMeta(customer, pkg, periodMonth, periodYear) {
 }
 
 function generateMonthlyInvoices(month, year) {
-  const customers = db.prepare("SELECT * FROM customers WHERE status IN ('active','suspended') AND package_id IS NOT NULL").all();
+  const customers = db.prepare("SELECT * FROM customers WHERE status IN ('active','suspended') AND package_id IS NOT NULL AND COALESCE(billing_type, 'postpaid') = 'postpaid'").all();
   const existing  = db.prepare('SELECT customer_id FROM invoices WHERE period_month=? AND period_year=?').all(month, year);
   const existingIds = new Set(existing.map(e => e.customer_id));
   const insert = db.prepare(`INSERT INTO invoices (customer_id, period_month, period_year, amount, notes) VALUES (?, ?, ?, ?, ?)`);
@@ -127,6 +127,7 @@ function generateInvoiceForCustomer(customerId, month, year) {
 
   const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(cid);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
+  if (customer.billing_type === 'prepaid') throw new Error('Pelanggan prabayar tidak menggunakan invoice bulanan');
   if (!customer.package_id) throw new Error('Pelanggan belum memiliki paket');
 
   const exists = db.prepare('SELECT id FROM invoices WHERE customer_id=? AND period_month=? AND period_year=? LIMIT 1').get(cid, m, y);
@@ -178,6 +179,7 @@ function payInvoicesForCustomerMonths(customerId, year, months, paidByName, note
 
   const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(cid);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
+  if (customer.billing_type === 'prepaid') throw new Error('Pelanggan prabayar tidak menggunakan invoice bulanan');
   if (!customer.package_id) throw new Error('Pelanggan belum memiliki paket');
 
   const pkg = db.prepare('SELECT * FROM packages WHERE id=?').get(customer.package_id);
@@ -514,6 +516,7 @@ function createInstallProrataCatchUpInvoice(customerId) {
 
   const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(cid);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
+  if (customer.billing_type === 'prepaid') throw new Error('Pelanggan prabayar tidak menggunakan invoice bulanan');
   if (!customer.package_id) throw new Error('Pelanggan belum memiliki paket');
   if (!customer.install_date) throw new Error('Isi tanggal pasang (install_date) di data pelanggan');
 

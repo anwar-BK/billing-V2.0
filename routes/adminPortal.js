@@ -1602,6 +1602,7 @@ router.post('/customers', requireAdminSession, express.urlencoded({ extended: tr
   try {
     const connectionType = String(req.body.connection_type || 'pppoe').trim().toLowerCase() || 'pppoe';
     req.body.connection_type = connectionType;
+    if (String(req.body.billing_type || 'postpaid').trim() === 'prepaid') req.body.status = 'suspended';
 
     if (connectionType !== 'pppoe') req.body.pppoe_username = '';
     if (connectionType !== 'static') req.body.static_ip = '';
@@ -2210,6 +2211,12 @@ router.post('/customers/:id/billing/pay', requireAdminSession, express.urlencode
     const y = parseInt(year);
     const paidBy = resolvePaidByName(req, paid_by_name);
     const customer = customerSvc.getCustomerById(req.params.id);
+
+    if (customer && customer.billing_type === 'prepaid') {
+      const result = await customerSvc.activatePrepaidFor30Days(req.params.id, req.body.amount, paidBy, notes);
+      req.session._msg = { type: 'success', text: `Pembayaran prabayar berhasil. Layanan "${result.customerName}" aktif sampai ${result.activeUntil}.` };
+      return res.redirect('back');
+    }
 
     if (months != null) {
       const sum = billingSvc.payInvoicesForCustomerMonths(req.params.id, y, months, paidBy, notes);
@@ -5577,6 +5584,9 @@ router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ 
     const temporaryReminderDays = req.body && req.body.temporary_reminder_days !== undefined
       ? parseInt(req.body.temporary_reminder_days)
       : 1;
+    const prepaidReminderDays = req.body && req.body.prepaid_reminder_days !== undefined
+      ? parseInt(req.body.prepaid_reminder_days)
+      : 3;
     const next = {
       whatsapp_auto_billing_enabled: enabled,
       whatsapp_billing_to_customer_enabled: billingEnabled,
@@ -5585,7 +5595,10 @@ router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ 
         : 1,
       whatsapp_temporary_active_reminder_days: Number.isFinite(temporaryReminderDays)
         ? Math.max(0, Math.min(31, temporaryReminderDays))
-        : 1
+        : 1,
+      prepaid_reminder_days_before_expiry: Number.isFinite(prepaidReminderDays)
+        ? Math.max(0, Math.min(30, prepaidReminderDays))
+        : 3
     };
     if (delay != null && Number.isFinite(delay) && delay >= 1 && delay <= 60) {
       next.whatsapp_broadcast_delay = delay;

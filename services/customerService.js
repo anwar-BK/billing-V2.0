@@ -127,8 +127,8 @@ function getCustomerById(id) {
 
 function createCustomer(data) {
   return db.prepare(`
-    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (name, phone, email, address, package_id, router_id, olt_id, odp_id, pon_port, lat, lng, genieacs_tag, pppoe_username, pppoe_password, pppoe_remote_address, isolir_profile, status, billing_type, install_date, notes, auto_isolate, isolate_day, connection_type, static_ip, mac_address, hotspot_username, hotspot_password, hotspot_profile, collector_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
     data.package_id ? parseInt(data.package_id) : null,
@@ -142,7 +142,8 @@ function createCustomer(data) {
     data.pppoe_password || '',
     data.pppoe_remote_address || '',
     data.isolir_profile || 'isolir',
-    data.status || 'active',
+    data.billing_type === 'prepaid' ? 'suspended' : (data.status || 'active'),
+    data.billing_type === 'prepaid' ? 'prepaid' : 'postpaid',
     data.install_date || null, data.notes || '',
     data.auto_isolate !== undefined ? parseInt(data.auto_isolate) : 1,
     data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
@@ -162,7 +163,7 @@ function updateCustomer(id, data) {
   const pkgChanged = prev && Number(prev.package_id || 0) !== Number(newPkgId || 0);
 
   const result = db.prepare(`
-    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?
+    UPDATE customers SET name=?, phone=?, email=?, address=?, package_id=?, router_id=?, olt_id=?, odp_id=?, pon_port=?, lat=?, lng=?, genieacs_tag=?, pppoe_username=?, pppoe_password=?, pppoe_remote_address=?, isolir_profile=?, status=?, billing_type=?, install_date=?, notes=?, auto_isolate=?, isolate_day=?, cable_path=?, connection_type=?, static_ip=?, mac_address=?, hotspot_username=?, hotspot_password=?, hotspot_profile=?, collector_id=?
     WHERE id=?
   `).run(
     data.name, data.phone || '', data.email || '', data.address || '',
@@ -178,6 +179,7 @@ function updateCustomer(id, data) {
     data.pppoe_remote_address || '',
     data.isolir_profile || 'isolir',
     data.status || 'active',
+    data.billing_type === 'prepaid' ? 'prepaid' : 'postpaid',
     data.install_date || null, data.notes || '',
     data.auto_isolate !== undefined ? parseInt(data.auto_isolate) : 1,
     data.isolate_day !== undefined ? parseInt(data.isolate_day) : 10,
@@ -459,7 +461,7 @@ function findCustomerByAny(val) {
   return null;
 }
 
-async function suspendCustomer(id) {
+async function suspendCustomer(id, reason = 'billing') {
   const customer = getCustomerById(id);
   if (!customer) throw new Error('Pelanggan tidak ditemukan');
   
@@ -525,7 +527,9 @@ async function suspendCustomer(id) {
       if (getSetting('whatsapp_enabled', false)) {
         const { sendWA, whatsappStatus } = await import('./whatsappBot.mjs');
         if (whatsappStatus && whatsappStatus.connection === 'open') {
-          const defaultIsolir = `Yth. Pelanggan {{nama}},\n\nLayanan internet Anda (Paket {{paket}}) saat ini ditangguhkan (Terisolir) karena belum melunasi tagihan sebesar *Rp {{tagihan}}*.\n\nSilakan lakukan pembayaran segera melalui portal pelanggan: {{link}}\n\nTerima kasih.`;
+          const defaultIsolir = reason === 'prepaid'
+            ? `Yth. Pelanggan {{nama}},\n\nMasa aktif internet prabayar Anda telah berakhir sehingga layanan saat ini diisolir. Silakan melakukan pembayaran prabayar untuk mengaktifkan kembali layanan selama 30 hari.\n\nTerima kasih.`
+            : `Yth. Pelanggan {{nama}},\n\nLayanan internet Anda (Paket {{paket}}) saat ini ditangguhkan (Terisolir) karena belum melunasi tagihan sebesar *Rp {{tagihan}}*.\n\nSilakan lakukan pembayaran segera melalui portal pelanggan: {{link}}\n\nTerima kasih.`;
           const template = db.getAppSetting('whatsapp_isolir_message', defaultIsolir);
 
           // Get unpaid invoices & calculate total amount
@@ -655,9 +659,35 @@ function clearTemporaryActivation(id) {
   return db.prepare('UPDATE customers SET temporary_active_until = NULL WHERE id = ?').run(id);
 }
 
+function addDaysToDate(date, days) {
+  const next = new Date(date.getTime());
+  next.setDate(next.getDate() + days);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+}
+
+async function activatePrepaidFor30Days(id, amount = 0, paidByName = 'Admin', notes = '') {
+  const customer = getCustomerById(id);
+  if (!customer) throw new Error('Pelanggan tidak ditemukan');
+  if (customer.billing_type !== 'prepaid') throw new Error('Pelanggan ini bukan pelanggan prabayar');
+
+  const today = getCurrentDateInTimezone();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const currentUntil = String(customer.prepaid_active_until || '').trim();
+  const startDate = currentUntil >= todayIso ? new Date(`${currentUntil}T12:00:00`) : today;
+  const activeFrom = currentUntil >= todayIso ? currentUntil : todayIso;
+  const activeUntil = addDaysToDate(startDate, 30);
+
+  await activateCustomer(id);
+  db.transaction(() => {
+    db.prepare('UPDATE customers SET prepaid_active_until = ? WHERE id = ?').run(activeUntil, id);
+    db.prepare('INSERT INTO prepaid_payments (customer_id, amount, paid_by_name, notes, active_from, active_until) VALUES (?, ?, ?, ?, ?, ?)').run(id, Number(amount) || 0, paidByName || 'Admin', notes || '', activeFrom, activeUntil);
+  })();
+  return { customerName: customer.name, activeFrom, activeUntil };
+}
+
 module.exports = {
   getAllCustomers, getCustomerById, createCustomer, updateCustomer, deleteCustomer, getCustomerStats,
   getAllPackages, getPackageById, createPackage, updatePackage, deletePackage,
-  suspendCustomer, activateCustomer, activateCustomerTemporarily, clearTemporaryActivation, findCustomerByAny, updateCustomerCablePath,
+  suspendCustomer, activateCustomer, activateCustomerTemporarily, clearTemporaryActivation, activatePrepaidFor30Days, findCustomerByAny, updateCustomerCablePath,
   resetPromoCyclesUsed, getEffectiveRouterId
 };

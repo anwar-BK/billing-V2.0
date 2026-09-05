@@ -139,6 +139,8 @@ runSchema(`
     pppoe_username TEXT DEFAULT '',
     isolir_profile TEXT DEFAULT 'isolir',
     status TEXT DEFAULT 'active',
+    billing_type TEXT NOT NULL DEFAULT 'postpaid', -- prepaid, postpaid
+    prepaid_active_until DATE,
     install_date DATE,
     notes TEXT DEFAULT '',
     created_at DATETIME DEFAULT (NOW_LOCAL())
@@ -198,6 +200,19 @@ runSchema(`
     notes TEXT DEFAULT '',
     created_at DATETIME DEFAULT (NOW_LOCAL())
   );
+
+  CREATE TABLE IF NOT EXISTS prepaid_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL DEFAULT 0,
+    paid_by_name TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    active_from DATE NOT NULL,
+    active_until DATE NOT NULL,
+    created_at DATETIME DEFAULT (NOW_LOCAL())
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_prepaid_payments_customer ON prepaid_payments(customer_id);
 
   CREATE TABLE IF NOT EXISTS collector_payment_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -750,6 +765,8 @@ try {
 try {
   db.exec("ALTER TABLE customers ADD COLUMN collector_id INTEGER REFERENCES collectors(id) ON DELETE SET NULL");
 } catch (e) { /* ignore if already exists */ }
+try { db.exec("ALTER TABLE customers ADD COLUMN billing_type TEXT NOT NULL DEFAULT 'postpaid'"); } catch (e) { /* ignore if already exists */ }
+try { db.exec("ALTER TABLE customers ADD COLUMN prepaid_active_until DATE"); } catch (e) { /* ignore if already exists */ }
 try {
   db.exec("ALTER TABLE collectors ADD COLUMN auto_approve INTEGER DEFAULT 0");
 } catch (e) { /* ignore if already exists */ }

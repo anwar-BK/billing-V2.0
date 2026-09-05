@@ -115,6 +115,14 @@
           </div>
 
           <div class="form-row" style="margin-bottom: 12px;">
+            <div class="fg">
+              <label class="fl">Pengingat Prabayar Sebelum Masa Aktif Habis (Hari)</label>
+              <input class="fc" type="number" name="prepaid_reminder_days" value="<%= getSetting('prepaid_reminder_days_before_expiry', 3) %>" min="0" max="30" required>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 6px;">Contoh: isi 3 untuk mengirim WhatsApp pada H-3 sebelum masa aktif prabayar berakhir.</div>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom: 12px;">
             <div class="fg" style="width: 100%;">
               <label class="fl">Pengingat Otomatis (Jadwal)</label>
               <label style="display:flex; align-items:center; gap:10px; font-weight:800; color: var(--text);">

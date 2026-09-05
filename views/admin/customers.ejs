@@ -20,7 +20,7 @@
   <div class="topbar">
     <div class="tb-title"><button class="hb-menu" onclick="toggleSidebar()"><i class="bi bi-list"></i></button><i class="bi bi-people"></i> <%= t('admin.customers.manage_title', 'Manajemen Pelanggan') %></div>
     <div class="tb-right">
-      <span class="adm-badge"><i class="bi bi-person-fill"></i> <%= (typeof session !== 'undefined' && session.isCashier) ? t('admin.role.cashier', 'Kasir') : t('admin.role.admin', 'Admin') %></span>
+        <div class="fg"><label class="fl">Nominal Pembayaran Prabayar (Opsional)</label><input class="fc" type="number" name="amount" min="0" placeholder="Isi nominal pembayaran jika pelanggan prabayar"></div>
       <a href="/admin/logout" class="btn btn-g btn-sm"><i class="bi bi-box-arrow-left"></i></a>
     </div>
   </div>
@@ -131,6 +131,10 @@
                 <% if (c.status==='active') { %><span class="badge bs"><i class="bi bi-circle-fill" style="font-size:7px"></i><%= t('admin.customers.filter.active', 'Aktif') %></span>
                 <% } else if (c.status==='suspended') { %><span class="badge bw"><%= t('admin.customers.filter.suspended', 'Suspend') %></span>
                 <% } else { %><span class="badge bm"><%= t('admin.customers.filter.inactive', 'Nonaktif') %></span><% } %>
+                <span class="badge <%= c.billing_type === 'prepaid' ? 'bp' : 'bs' %>" style="margin-top:4px"><i class="bi bi-wallet2"></i> <%= c.billing_type === 'prepaid' ? 'Prabayar' : 'Pascabayar' %></span>
+                <% if (c.billing_type === 'prepaid') { %>
+                  <div style="font-size:10px;margin-top:4px;color:<%= c.prepaid_active_until && c.prepaid_active_until >= new Date().toISOString().slice(0, 10) ? 'var(--success)' : 'var(--danger)' %>"><i class="bi bi-calendar2-check"></i> Aktif s/d <%= c.prepaid_active_until || 'Belum bayar' %></div>
+                <% } %>
                 <div style="font-size:10px;margin-top:4px">
                   <i class="bi bi-clock-history"></i> <%= t('admin.customers.auto_isolate.label', 'Auto Isolir') %>:
                   <span class="<%= c.auto_isolate === 0 ? 'text-danger' : 'text-success' %>">
@@ -302,6 +306,7 @@
           </div>
           <div class="fg"><label class="fl">Tanggal Pasang</label><input class="fc" type="date" name="install_date"></div>
         </div>
+        <div class="fg"><label class="fl">Metode Pembayaran</label><select class="fs" name="billing_type"><option value="postpaid">Pascabayar - Tagihan Bulanan</option><option value="prepaid">Prabayar - Bayar di Muka</option></select></div>
         <div class="form-row">
           <div class="fg">
             <label class="fl">Isolir Otomatis</label>
@@ -500,6 +505,7 @@
           </div>
           <div class="fg"><label class="fl">Tanggal Pasang</label><input class="fc" type="date" name="install_date" id="e_install"></div>
         </div>
+        <div class="fg"><label class="fl">Metode Pembayaran</label><select class="fs" name="billing_type" id="e_billing_type"><option value="postpaid">Pascabayar - Tagihan Bulanan</option><option value="prepaid">Prabayar - Bayar di Muka</option></select></div>
         <div class="form-row">
           <div class="fg">
             <label class="fl">Isolir Otomatis</label>
@@ -855,6 +861,7 @@ function editCust(idx) {
   document.getElementById('e_isolir_profile').value=c.isolir_profile||'isolir';
   document.getElementById('e_status').value=c.status||'active';
   document.getElementById('e_install').value=c.install_date||'';
+  document.getElementById('e_billing_type').value=c.billing_type||'postpaid';
   document.getElementById('e_notes').value=c.notes||'';
   document.getElementById('e_auto_isolate').value=(c.auto_isolate !== undefined ? c.auto_isolate : 1);
   document.getElementById('e_isolate_day').value=(c.isolate_day || 10);

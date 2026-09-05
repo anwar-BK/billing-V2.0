@@ -252,6 +252,12 @@ git fetch origin
 
 Sebelum update produksi, buat backup tambahan dan pastikan tidak ada perubahan source penting yang belum disimpan. Data operasional tetap berada di volume/folder persisten, tetapi backup eksternal tetap dianjurkan.
 
+## Alur Pelanggan Prabayar
+
+Pelanggan prabayar baru dibuat dalam status nonaktif/terisolir. Admin mencatat pembayaran melalui tombol pembayaran pada daftar pelanggan; pembayaran tersebut mengaktifkan layanan selama 30 hari. Jika masa aktif masih tersisa, pembayaran berikutnya menambah 30 hari dari tanggal akhir masa aktif saat ini.
+
+Pelanggan prabayar tidak dibuatkan invoice bulanan. Cron harian mengisolir layanan setelah `prepaid_active_until` lewat dan cron WhatsApp mengirim pengingat sesuai pengaturan **Pengingat Prabayar Sebelum Masa Aktif Habis** di menu **WhatsApp/Broadcast**. Nilai bawaan pengingat adalah H-3 dan dapat diubah dari 0 sampai 30 hari.
+
 ---
 
 ## 🚀 Panduan Instalasi Lengkap dari Nol (Fresh Server)
